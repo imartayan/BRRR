@@ -28,20 +28,20 @@ fn main() {
     });
     reads = Fasta::from_file(filename);
     reads.process(|nucs| {
-        let kmer = Kmer::<K, T>::new();
-        let mmer = Kmer::<M, T>::new();
+        let mut kmer = Kmer::<K, T>::new();
+        let mut mmer = Kmer::<M, T>::new();
         let mut queue = MinimizerQueue::<M, T>::new(K);
         for (i, base) in nucs.filter_map(T::from_nuc).enumerate() {
             if i < M - 1 {
-                mmer.extend(base);
+                mmer = mmer.extend(base);
             } else {
-                mmer.append(base);
+                mmer = mmer.append(base);
                 queue.insert(mmer);
             }
             if i < K - 1 {
-                kmer.extend(base);
+                kmer = kmer.extend(base);
             } else {
-                kmer.append(base);
+                kmer = kmer.append(base);
                 let min = queue.get_min();
                 if let Some(&c) = count.get(&min.to_int()) {
                     if c >= THRESHOLD {
