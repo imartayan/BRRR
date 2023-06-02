@@ -3,8 +3,8 @@ use std::collections::VecDeque;
 
 pub struct MinimizerQueue<const M: usize, T: Base> {
     deq: VecDeque<(Kmer<M, T>, u8)>,
+    width: u8,
     time: u8,
-    w: u8,
 }
 
 macro_rules! impl_t {
@@ -13,8 +13,8 @@ macro_rules! impl_t {
         pub fn new(k: usize) -> Self {
             Self {
                 deq: VecDeque::with_capacity(k - M + 1),
+                width: (k - M + 1) as u8,
                 time: 0,
-                w: (k - M + 1) as u8,
             }
         }
 
@@ -42,8 +42,7 @@ macro_rules! impl_t {
                 }
             }
             self.deq.push_back((u, self.time));
-            self.time  = (self.time + 1) % self.w;
-
+            self.time  = (self.time + 1) % self.width;
         }
     }
 )*}}
