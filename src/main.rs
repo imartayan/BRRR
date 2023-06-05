@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+mod bloom;
 mod kmer;
 mod minimizer;
 mod reads;
