@@ -1,8 +1,11 @@
 use crate::kmer::{Base, Kmer};
+use rustc_hash::FxHasher;
 use std::collections::VecDeque;
+use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 
 pub struct MinimizerQueue<const M: usize, T: Base> {
     deq: VecDeque<(Kmer<M, T>, u8)>,
+    hash_builder: BuildHasherDefault<FxHasher>,
     width: u8,
     time: u8,
 }
@@ -13,6 +16,7 @@ macro_rules! impl_t {
         pub fn new(k: usize) -> Self {
             Self {
                 deq: VecDeque::with_capacity(k - M + 1),
+                hash_builder: Default::default(),
                 width: (k - M + 1) as u8,
                 time: 0,
             }
@@ -25,11 +29,17 @@ macro_rules! impl_t {
             self.deq[0].0
         }
 
+        fn hash(&self, u: Kmer<M, $T>) -> u64 {
+            let mut state = self.hash_builder.build_hasher();
+            u.to_int().hash(&mut state);
+            state.finish()
+        }
+
         pub fn insert(&mut self, u: Kmer<M, $T>) {
             let mut i = self.deq.len();
             while i > 0 {
                 let (v, _) = self.deq[i-1];
-                if v.to_int() <= u.to_int() {
+                if self.hash(v) <= self.hash(u) {
                     break;
                 }
                 i -= 1;
@@ -59,9 +69,25 @@ mod tests {
         const M: usize = 3;
         type T = u8;
         let mut queue = MinimizerQueue::<M, T>::new(K);
-        Kmer::<M, T>::iter_from_nucs(b"AAATAGTCTTA".iter()).for_each(|mmer| {
+        Kmer::<M, T>::iter_from_nucs(b"AAATAGT".iter()).for_each(|mmer| {
             queue.insert(mmer);
         });
-        assert_eq!(queue.get_min(), Kmer::<M, T>::from_nucs(b"AGT"));
+        assert_eq!(queue.get_min(), Kmer::<M, T>::from_nucs(b"AAA"));
+        Kmer::<M, T>::iter_from_nucs(b"AAT".iter()).for_each(|mmer| {
+            queue.insert(mmer);
+        });
+        assert!(queue.get_min() != Kmer::<M, T>::from_nucs(b"AAA"));
+    }
+
+    #[test]
+    fn test_hash() {
+        const K: usize = 7;
+        const M: usize = 3;
+        type T = u8;
+        let queue = MinimizerQueue::<M, T>::new(K);
+        let u = Kmer::<M, T>::from_nucs(b"ACT");
+        let h1 = queue.hash(u);
+        let h2 = queue.hash(u);
+        assert_eq!(h1, h2);
     }
 }
