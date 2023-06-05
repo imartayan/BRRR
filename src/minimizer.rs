@@ -1,7 +1,7 @@
 use crate::kmer::{Base, Kmer};
+use core::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use rustc_hash::FxHasher;
 use std::collections::VecDeque;
-use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 
 pub struct MinimizerQueue<const M: usize, T: Base> {
     deq: VecDeque<(Kmer<M, T>, u8)>,
@@ -76,7 +76,7 @@ mod tests {
         Kmer::<M, T>::iter_from_nucs(b"AAT".iter()).for_each(|mmer| {
             queue.insert(mmer);
         });
-        assert!(queue.get_min() != Kmer::<M, T>::from_nucs(b"AAA"));
+        assert_ne!(queue.get_min(), Kmer::<M, T>::from_nucs(b"AAA"));
     }
 
     #[test]
