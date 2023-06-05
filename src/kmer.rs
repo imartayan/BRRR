@@ -8,7 +8,7 @@ pub trait Base: PrimInt + Unsigned {
     fn bases() -> [Self; 4];
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
 pub struct Kmer<const K: usize, T: Base>(T);
 
 pub struct KmerIterator<const K: usize, T: Base, I: Iterator<Item = T>> {

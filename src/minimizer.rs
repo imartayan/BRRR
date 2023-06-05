@@ -31,7 +31,7 @@ macro_rules! impl_t {
 
         fn hash(&self, u: Kmer<M, $T>) -> u64 {
             let mut state = self.hash_builder.build_hasher();
-            u.to_int().hash(&mut state);
+            u.hash(&mut state);
             state.finish()
         }
 
