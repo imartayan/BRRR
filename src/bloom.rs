@@ -12,16 +12,20 @@ pub struct BloomFilter {
 impl BloomFilter {
     const BLOCK_SIZE: usize = 1 << 12;
 
-    pub fn new(size: usize, k: usize) -> Self {
+    pub fn new_with_seed(size: usize, k: usize, seed: usize) -> Self {
         Self {
             size,
             k,
             bv: BitVec::from_elem(size, false),
             hash_builders: (
-                RandomState::with_seed(size + k + 1),
-                RandomState::with_seed(size + k + 2),
+                RandomState::with_seed(seed),
+                RandomState::with_seed(seed + 1),
             ),
         }
+    }
+
+    pub fn new(size: usize, k: usize) -> Self {
+        Self::new_with_seed(size, k, size + k)
     }
 
     pub fn new_with_rate(size: usize, rate: f64) -> Self {
