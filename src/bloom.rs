@@ -30,15 +30,6 @@ impl BloomFilter {
         Self::new_with_seed(size, k, size + k)
     }
 
-    pub fn new_with_rate(size: usize, rate: f64) -> Self {
-        let k = if 0f64 < rate && rate < 1f64 {
-            -f64::log2(rate) as usize
-        } else {
-            1
-        };
-        Self::new(size, k)
-    }
-
     fn hashes<T: Hash>(&self, x: T) -> (u64, u64) {
         let mut state_0 = self.hash_builders.0.build_hasher();
         let mut state_1 = self.hash_builders.1.build_hasher();
