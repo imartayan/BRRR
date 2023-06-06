@@ -18,8 +18,8 @@ impl BloomFilter {
             k,
             bv: BitVec::from_elem(size, false),
             hash_builders: (
-                RandomState::with_seeds(1, 2, 3, 4),
-                RandomState::with_seeds(5, 6, 7, 8),
+                RandomState::with_seed(size + k + 1),
+                RandomState::with_seed(size + k + 2),
             ),
         }
     }
