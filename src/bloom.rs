@@ -101,8 +101,12 @@ impl CascadingBloomFilter {
         self.bfs.iter().all(|bf| bf.contains(&x))
     }
 
+    pub fn insert_if_missing<T: Hash>(&mut self, x: T) -> bool {
+        self.bfs.iter_mut().any(|bf| bf.insert_if_missing(&x))
+    }
+
     pub fn insert<T: Hash>(&mut self, x: T) {
-        self.bfs.iter_mut().any(|bf| bf.insert_if_missing(&x));
+        self.insert_if_missing(x);
     }
 }
 
@@ -143,7 +147,7 @@ mod tests {
         for x in 0..10 {
             assert!(cbf.contains(x));
         }
-        for x in 10..30 {
+        for x in 10..40 {
             assert!(!cbf.contains(x));
         }
     }
