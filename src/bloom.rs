@@ -63,6 +63,17 @@ impl BloomFilter {
     pub fn insert<T: Hash>(&mut self, x: T) {
         self.indices(x).iter().for_each(|&i| self.bv.set(i, true));
     }
+
+    pub fn insert_if_missing<T: Hash>(&mut self, x: T) -> bool {
+        let mut missing = false;
+        for i in self.indices(x) {
+            if !self.bv.get(i).unwrap_or(false) {
+                missing = true;
+                self.bv.set(i, true);
+            }
+        }
+        missing
+    }
 }
 
 #[cfg(test)]
