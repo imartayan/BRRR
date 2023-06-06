@@ -3,7 +3,7 @@ mod bloom;
 mod kmer;
 mod minimizer;
 mod reads;
-use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
+use bloom::{BloomFilter, CascadingBloomFilter};
 use kmer::{Base, Kmer};
 use minimizer::MinimizerQueue;
 use reads::{Fasta, ReadProcess};
@@ -12,14 +12,17 @@ use std::env;
 const K: usize = 31;
 const M: usize = 21;
 type T = u64;
-const THRESHOLD: u8 = 3;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let filename = args.get(1).expect("No filename given").as_str();
     let reads = Fasta::from_file(filename);
-    let mut solid_mins: HashMap<_, u8> = HashMap::new();
-    let mut solid_kmers = HashSet::new();
+    let size = 100_000_000;
+    let k = 2;
+    let sizes = &[size, size / 2, size / 4];
+    let ks = &[k, k, k];
+    let mut solid_mins = CascadingBloomFilter::new(sizes, ks);
+    let mut solid_kmers = BloomFilter::new(size / 4, k);
     reads.process(|nucs| {
         let mut kmer = Kmer::<K, T>::new();
         let mut mmer = Kmer::<M, T>::new();
@@ -36,14 +39,8 @@ fn main() {
             } else {
                 kmer = kmer.append(base);
                 let min = queue.get_min();
-                solid_mins
-                    .entry(min)
-                    .and_modify(|c| *c = c.saturating_add(1))
-                    .or_insert(1);
-                if let Some(&c) = solid_mins.get(&min) {
-                    if c >= THRESHOLD {
-                        solid_kmers.insert(kmer);
-                    }
+                if !solid_mins.insert_if_missing(min) {
+                    solid_kmers.insert(kmer);
                 }
             }
         }
