@@ -83,7 +83,7 @@ pub struct CascadingBloomFilter {
 }
 
 impl CascadingBloomFilter {
-    pub fn new_with_seed(sizes: Vec<usize>, ks: Vec<usize>, seed: u64) -> Self {
+    pub fn new_with_seed(sizes: &[usize], ks: &[usize], seed: u64) -> Self {
         let mut rng = SmallRng::seed_from_u64(seed);
         let bfs = sizes
             .iter()
@@ -93,7 +93,7 @@ impl CascadingBloomFilter {
         Self { bfs }
     }
 
-    pub fn new(sizes: Vec<usize>, ks: Vec<usize>) -> Self {
+    pub fn new(sizes: &[usize], ks: &[usize]) -> Self {
         Self::new_with_seed(sizes, ks, 101010)
     }
 
@@ -132,8 +132,8 @@ mod tests {
 
     #[test]
     fn test_cascading() {
-        let sizes = vec![1 << 20, 1 << 19, 1 << 18];
-        let ks = vec![4, 2, 1];
+        let sizes = &[1 << 20, 1 << 19, 1 << 18];
+        let ks = &[4, 2, 1];
         let mut cbf = CascadingBloomFilter::new(sizes, ks);
         for x in 0..30 {
             cbf.insert(x);
