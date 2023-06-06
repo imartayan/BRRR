@@ -1,6 +1,8 @@
 use ahash::RandomState;
 use bit_vec::BitVec;
 use core::hash::{BuildHasher, Hash, Hasher};
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 
 pub struct BloomFilter {
     size: usize,
@@ -76,6 +78,34 @@ impl BloomFilter {
     }
 }
 
+pub struct CascadingBloomFilter {
+    bfs: Vec<BloomFilter>,
+}
+
+impl CascadingBloomFilter {
+    pub fn new_with_seed(sizes: Vec<usize>, ks: Vec<usize>, seed: u64) -> Self {
+        let mut rng = SmallRng::seed_from_u64(seed);
+        let bfs = sizes
+            .iter()
+            .zip(ks.iter())
+            .map(|(&size, &k)| BloomFilter::new_with_seed(size, k, rng.gen()))
+            .collect();
+        Self { bfs }
+    }
+
+    pub fn new(sizes: Vec<usize>, ks: Vec<usize>) -> Self {
+        Self::new_with_seed(sizes, ks, 101010)
+    }
+
+    pub fn contains<T: Hash>(&self, x: T) -> bool {
+        self.bfs.iter().all(|bf| bf.contains(&x))
+    }
+
+    pub fn insert<T: Hash>(&mut self, x: T) {
+        self.bfs.iter_mut().any(|bf| bf.insert_if_missing(&x));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,6 +123,28 @@ mod tests {
         }
         for x in 10..20 {
             assert!(!bf.contains(x));
+        }
+    }
+
+    #[test]
+    fn test_cascading() {
+        let sizes = vec![1 << 20, 1 << 19, 1 << 18];
+        let ks = vec![4, 2, 1];
+        let mut cbf = CascadingBloomFilter::new(sizes, ks);
+        for x in 0..30 {
+            cbf.insert(x);
+        }
+        for x in 0..20 {
+            cbf.insert(x);
+        }
+        for x in 0..10 {
+            cbf.insert(x);
+        }
+        for x in 0..10 {
+            assert!(cbf.contains(x));
+        }
+        for x in 10..30 {
+            assert!(!cbf.contains(x));
         }
     }
 }
