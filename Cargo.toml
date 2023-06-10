@@ -20,5 +20,6 @@ incremental = true
 
 [profile.release]
 opt-level = 3
+panic = "abort"
 lto = true
 incremental = true
