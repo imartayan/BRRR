@@ -51,7 +51,7 @@ impl BloomFilter {
         res[0] = u;
         for i in 1..self.k {
             local_addr = (local_addr + v) & Self::BLOCK_MASK;
-            res[i] = block_addr + local_addr;
+            res[i] = block_addr | local_addr;
         }
         res
     }
