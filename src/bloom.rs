@@ -13,8 +13,11 @@ pub struct BloomFilter {
 
 impl BloomFilter {
     const BLOCK_SIZE: usize = 1 << 12;
+    const BLOCK_MASK: usize = Self::BLOCK_SIZE - 1;
+    const BLOCK_PREFIX: usize = !Self::BLOCK_MASK;
 
     pub fn new_with_seed(size: usize, k: usize, seed: usize) -> Self {
+        let size = size.saturating_add(Self::BLOCK_SIZE - 1) / Self::BLOCK_SIZE * Self::BLOCK_SIZE;
         Self {
             size,
             k,
@@ -39,12 +42,18 @@ impl BloomFilter {
     }
 
     fn indices<T: Hash>(&self, x: T) -> Vec<usize> {
+        let mut res = vec![0; self.k];
         let (h0, h1) = self.hashes(x);
-        let a = h0 as usize % self.size;
-        let b = h1 as usize % Self::BLOCK_SIZE;
-        (0..self.k)
-            .map(|j| a.wrapping_add(j.wrapping_mul(b) % Self::BLOCK_SIZE) % self.size)
-            .collect()
+        let u = h0 as usize % self.size;
+        let v = h1 as usize;
+        let block_addr = u & Self::BLOCK_PREFIX;
+        let mut local_addr = u;
+        res[0] = u;
+        for i in 1..self.k {
+            local_addr = (local_addr + v) & Self::BLOCK_MASK;
+            res[i] = block_addr + local_addr;
+        }
+        res
     }
 
     pub fn contains<T: Hash>(&self, x: T) -> bool {
