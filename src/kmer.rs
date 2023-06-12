@@ -1,7 +1,8 @@
 use num_traits::int::PrimInt;
 use num_traits::sign::Unsigned;
 use std::cmp::min;
-use std::{iter::FilterMap, marker::PhantomData};
+use std::iter::FilterMap;
+use std::marker::PhantomData;
 
 pub trait Base: PrimInt + Unsigned {
     fn from_nuc(b: &u8) -> Option<Self>;
