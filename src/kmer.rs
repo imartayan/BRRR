@@ -1,5 +1,6 @@
 use num_traits::int::PrimInt;
 use num_traits::sign::Unsigned;
+use std::cmp::min;
 use std::{iter::FilterMap, marker::PhantomData};
 
 pub trait Base: PrimInt + Unsigned {
@@ -69,12 +70,7 @@ macro_rules! impl_t {
             [0, 1, 2, 3].map(|base| self.append(base))
         }
         pub fn canonical(self) -> Self {
-            let rc = self.rev_comp();
-            if self.to_int() < rc.to_int() {
-                self
-            } else {
-                rc
-            }
+            min(self, self.rev_comp())
         }
         pub fn submers<const M: usize>(self) -> Vec<Kmer<M, $T>> {
             let mut res = vec![Kmer::<M, $T>::new(); K - M + 1];
