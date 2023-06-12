@@ -136,7 +136,7 @@ impl_t!(u8, u16, u32, u64, u128);
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 impl<const K: usize> Kmer<K, u8> {
-    fn rev_comp(self) -> Self {
+    pub fn rev_comp(self) -> Self {
         let mut res = !self.to_int().reverse_bits();
         res = (res >> 1 & 0x55) | (res & 0x55) << 1;
         Self::from_int(res >> (2 * (4 - K)))
@@ -145,7 +145,7 @@ impl<const K: usize> Kmer<K, u8> {
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 impl<const K: usize> Kmer<K, u16> {
-    fn rev_comp(self) -> Self {
+    pub fn rev_comp(self) -> Self {
         let mut res = !self.to_int().reverse_bits();
         res = (res >> 1 & 0x5555) | (res & 0x5555) << 1;
         Self::from_int(res >> (2 * (8 - K)))
@@ -154,7 +154,7 @@ impl<const K: usize> Kmer<K, u16> {
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 impl<const K: usize> Kmer<K, u32> {
-    fn rev_comp(self) -> Self {
+    pub fn rev_comp(self) -> Self {
         let mut res = !self.to_int().reverse_bits();
         res = (res >> 1 & 0x5555_5555) | (res & 0x5555_5555) << 1;
         Self::from_int(res >> (2 * (16 - K)))
@@ -163,7 +163,7 @@ impl<const K: usize> Kmer<K, u32> {
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 impl<const K: usize> Kmer<K, u64> {
-    fn rev_comp(self) -> Self {
+    pub fn rev_comp(self) -> Self {
         let mut res = !self.to_int().reverse_bits();
         res = (res >> 1 & 0x5555_5555_5555_5555) | (res & 0x5555_5555_5555_5555) << 1;
         Self::from_int(res >> (2 * (32 - K)))
@@ -172,7 +172,7 @@ impl<const K: usize> Kmer<K, u64> {
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 impl<const K: usize> Kmer<K, u128> {
-    fn rev_comp(self) -> Self {
+    pub fn rev_comp(self) -> Self {
         let mut res = !self.to_int().reverse_bits();
         res = (res >> 1 & 0x5555_5555_5555_5555_5555_5555_5555_5555)
             | (res & 0x5555_5555_5555_5555_5555_5555_5555_5555) << 1;
@@ -182,7 +182,7 @@ impl<const K: usize> Kmer<K, u128> {
 
 #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
 impl<const K: usize> Kmer<K, u8> {
-    fn rev_comp(self) -> Self {
+    pub fn rev_comp(self) -> Self {
         let mut res = !self.to_int();
         res = (res >> 4 & 0x0F) | (res & 0x0F) << 4;
         res = (res >> 2 & 0x33) | (res & 0x33) << 2;
@@ -192,7 +192,7 @@ impl<const K: usize> Kmer<K, u8> {
 
 #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
 impl<const K: usize> Kmer<K, u16> {
-    fn rev_comp(self) -> Self {
+    pub fn rev_comp(self) -> Self {
         let mut res = !self.to_int().swap_bytes();
         res = (res >> 4 & 0x0F0F) | (res & 0x0F0F) << 4;
         res = (res >> 2 & 0x3333) | (res & 0x3333) << 2;
@@ -202,7 +202,7 @@ impl<const K: usize> Kmer<K, u16> {
 
 #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
 impl<const K: usize> Kmer<K, u32> {
-    fn rev_comp(self) -> Self {
+    pub fn rev_comp(self) -> Self {
         let mut res = !self.to_int().swap_bytes();
         res = (res >> 4 & 0x0F0F_0F0F) | (res & 0x0F0F_0F0F) << 4;
         res = (res >> 2 & 0x3333_3333) | (res & 0x3333_3333) << 2;
@@ -212,7 +212,7 @@ impl<const K: usize> Kmer<K, u32> {
 
 #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
 impl<const K: usize> Kmer<K, u64> {
-    fn rev_comp(self) -> Self {
+    pub fn rev_comp(self) -> Self {
         let mut res = !self.to_int().swap_bytes();
         res = (res >> 4 & 0x0F0F_0F0F_0F0F_0F0F) | (res & 0x0F0F_0F0F_0F0F_0F0F) << 4;
         res = (res >> 2 & 0x3333_3333_3333_3333) | (res & 0x3333_3333_3333_3333) << 2;
@@ -222,7 +222,7 @@ impl<const K: usize> Kmer<K, u64> {
 
 #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
 impl<const K: usize> Kmer<K, u128> {
-    fn rev_comp(self) -> Self {
+    pub fn rev_comp(self) -> Self {
         let mut res = !self.to_int().swap_bytes();
         res = (res >> 4 & 0x0F0F_0F0F_0F0F_0F0F_0F0F_0F0F_0F0F_0F0F)
             | (res & 0x0F0F_0F0F_0F0F_0F0F_0F0F_0F0F_0F0F_0F0F) << 4;
