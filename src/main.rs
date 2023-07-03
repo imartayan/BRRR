@@ -4,7 +4,7 @@ mod kmer;
 mod minimizer;
 mod reads;
 use bloom::{BloomFilter, CascadingBloomFilter};
-use kmer::{Base, Kmer};
+use kmer::{Base, Kmer, RawKmer};
 use minimizer::MinimizerQueue;
 use reads::{Fasta, ReadProcess};
 use std::env;
@@ -24,9 +24,9 @@ fn main() {
     let mut solid_mins = CascadingBloomFilter::new(sizes, ks);
     let mut solid_kmers = BloomFilter::new(size / 4, k);
     reads.process(|nucs| {
-        let mut kmer = Kmer::<K, T>::new();
-        let mut mmer = Kmer::<M, T>::new();
-        let mut queue = MinimizerQueue::<M, T>::new(K);
+        let mut kmer = RawKmer::<K, T>::new();
+        let mut mmer = RawKmer::<M, T>::new();
+        let mut queue = MinimizerQueue::new(K);
         for (i, base) in nucs.filter_map(T::from_nuc).enumerate() {
             if i < M - 1 {
                 mmer = mmer.extend(base);
@@ -42,6 +42,7 @@ fn main() {
                 if !solid_mins.insert_if_missing(min) {
                     solid_kmers.insert(kmer);
                 }
+                // solid_kmers.insert(kmer.canonical());
             }
         }
     });

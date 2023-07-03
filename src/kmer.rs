@@ -1,28 +1,112 @@
+use core::cmp::min;
+use core::fmt::{Binary, Display};
+use core::hash::Hash;
+use core::iter::FilterMap;
 use num_traits::int::PrimInt;
-use num_traits::sign::Unsigned;
-use std::cmp::min;
-use std::iter::FilterMap;
-use std::marker::PhantomData;
 
-pub trait Base: PrimInt + Unsigned {
+pub trait Base: PrimInt + Display + Binary {
+    const BASE_MASK: Self;
     fn from_nuc(b: &u8) -> Option<Self>;
     fn to_nuc(self) -> u8;
     fn bases() -> [Self; 4];
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Kmer<const K: usize, T: Base>(T);
+pub trait RevComp {
+    fn rev_comp(self) -> Self;
+}
 
-pub struct KmerIterator<const K: usize, T: Base, I: Iterator<Item = T>> {
-    kmer: Kmer<K, T>,
+pub trait Kmer<const K: usize, T: Base>: Sized + Copy + RevComp + Ord + Hash {
+    const MASK: T;
+    fn from_int(s: T) -> Self;
+    fn to_int(self) -> T;
+    #[inline]
+    fn new() -> Self {
+        Self::from_int(T::zero())
+    }
+    #[inline]
+    fn extend(self, base: T) -> Self {
+        Self::from_int((self.to_int() << 2) | base)
+    }
+    #[inline]
+    fn append(self, base: T) -> Self {
+        Self::from_int(((self.to_int() << 2) | base) & Self::MASK)
+    }
+    #[inline]
+    fn successors(self) -> [Self; 4] {
+        T::bases().map(|base| self.append(base))
+    }
+    #[inline]
+    fn canonical(self) -> Self {
+        min(self, self.rev_comp())
+    }
+    fn from_nucs(nucs: &[u8]) -> Self {
+        nucs.iter()
+            .filter_map(T::from_nuc)
+            .take(K)
+            .fold(Self::new(), |s, base| s.extend(base))
+    }
+    fn to_nucs(self) -> [u8; K] {
+        let mut res = [0u8; K];
+        let mut s = self.to_int();
+        for i in 0..K {
+            res[K - 1 - i] = (s & T::BASE_MASK).to_nuc();
+            s = s >> 2;
+        }
+        res
+    }
+    fn iter_from_bases<I: Iterator<Item = T>>(bases: I) -> KmerIterator<K, T, Self, I> {
+        KmerIterator {
+            kmer: Self::new(),
+            bases,
+            init: false,
+        }
+    }
+    fn iter_from_nucs<'a, I: Iterator<Item = &'a u8>>(
+        nucs: I,
+    ) -> KmerIterator<K, T, Self, FilterMap<I, fn(&u8) -> Option<T>>> {
+        Self::iter_from_bases(nucs.filter_map(<T>::from_nuc))
+    }
+}
+
+pub struct KmerIterator<const K: usize, T, KT, I>
+where
+    T: Base,
+    KT: Kmer<K, T>,
+    I: Iterator<Item = T>,
+{
+    kmer: KT,
     bases: I,
     init: bool,
-    _phantom: PhantomData<T>,
 }
+
+impl<const K: usize, T, KT, I> Iterator for KmerIterator<K, T, KT, I>
+where
+    T: Base,
+    KT: Kmer<K, T>,
+    I: Iterator<Item = T>,
+{
+    type Item = KT;
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.init {
+            self.init = true;
+            for _ in 0..K {
+                self.kmer = self.kmer.extend(self.bases.next()?);
+            }
+            Some(self.kmer)
+        } else {
+            self.kmer = self.kmer.append(self.bases.next()?);
+            Some(self.kmer)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RawKmer<const K: usize, T: Base>(T);
 
 macro_rules! impl_t {
 ($($T:ty),+) => {$(
     impl Base for $T {
+        const BASE_MASK: Self = 0b11;
         #[inline]
         fn from_nuc(b: &u8) -> Option<Self> {
             match b {
@@ -44,91 +128,15 @@ macro_rules! impl_t {
         }
     }
 
-    impl<const K: usize> Kmer<K, $T> {
-        pub const MASK: $T = (1 << (2 * K)) - 1;
+    impl<const K: usize> Kmer<K, $T> for RawKmer<K, $T> {
+        const MASK: $T = (1 << (2 * K)) - 1;
         #[inline(always)]
-        pub fn new() -> Self {
-            Self(0)
-        }
-        #[inline(always)]
-        pub fn from_int(s: $T) -> Self {
+        fn from_int(s: $T) -> Self {
             Self(s)
         }
         #[inline(always)]
-        pub fn to_int(self) -> $T {
+        fn to_int(self) -> $T {
             self.0
-        }
-        #[inline]
-        pub fn extend(self, base: $T) -> Self {
-            Self::from_int((self.to_int() << 2) | base)
-        }
-        #[inline]
-        pub fn append(self, base: $T) -> Self {
-            Self::from_int(((self.to_int() << 2) | base) & Self::MASK)
-        }
-        #[inline]
-        pub fn successors(self) -> [Self; 4] {
-            [0, 1, 2, 3].map(|base| self.append(base))
-        }
-        pub fn canonical(self) -> Self {
-            min(self, self.rev_comp())
-        }
-        pub fn submers<const M: usize>(self) -> Vec<Kmer<M, $T>> {
-            let mut res = vec![Kmer::<M, $T>::new(); K - M + 1];
-            let mut s = self.to_int();
-            for i in 0..(K - M + 1) {
-                res[K - M - i] = Kmer::<M, $T>::from_int(s & Kmer::<M, $T>::MASK);
-                s >>= 2;
-            }
-            res
-        }
-        pub fn from_nucs(nucs: &[u8]) -> Self {
-            nucs
-                .iter()
-                .filter_map(<$T>::from_nuc)
-                .take(K)
-                .fold(Self::new(), |s, base| s.extend(base))
-        }
-        pub fn to_nucs(self) -> [u8; K] {
-            let mut res = [0u8; K];
-            let mut s = self.to_int();
-            for i in 0..K {
-                res[K - 1 - i] = (s & 0b11).to_nuc();
-                s >>= 2;
-            }
-            res
-        }
-        pub fn iter_from_bases<I: Iterator<Item = $T>>(bases: I) -> KmerIterator<K, $T, I> {
-            KmerIterator {
-                kmer: Self::new(),
-                bases,
-                init: false,
-                _phantom: PhantomData,
-            }
-        }
-        pub fn iter_from_nucs<'a, I: Iterator<Item = &'a u8>>(
-            nucs: I,
-        ) -> KmerIterator<K, $T, FilterMap<I, fn(&u8) -> Option<$T>>> {
-            Self::iter_from_bases(nucs.filter_map(<$T>::from_nuc))
-        }
-    }
-
-    impl<const K: usize, I> Iterator for KmerIterator<K, $T, I>
-    where
-        I: Iterator<Item = $T>,
-    {
-        type Item = Kmer<K, $T>;
-        fn next(&mut self) -> Option<Self::Item> {
-            if !self.init {
-                self.init = true;
-                for _ in 0..K {
-                    self.kmer = self.kmer.extend(self.bases.next()?);
-                }
-                Some(self.kmer)
-            } else {
-                self.kmer = self.kmer.append(self.bases.next()?);
-                Some(self.kmer)
-            }
         }
     }
 )*}}
@@ -136,8 +144,8 @@ macro_rules! impl_t {
 impl_t!(u8, u16, u32, u64, u128);
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-impl<const K: usize> Kmer<K, u8> {
-    pub fn rev_comp(self) -> Self {
+impl<const K: usize> RevComp for RawKmer<K, u8> {
+    fn rev_comp(self) -> Self {
         let mut res = !self.to_int().reverse_bits();
         res = (res >> 1 & 0x55) | (res & 0x55) << 1;
         Self::from_int(res >> (2 * (4 - K)))
@@ -145,8 +153,8 @@ impl<const K: usize> Kmer<K, u8> {
 }
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-impl<const K: usize> Kmer<K, u16> {
-    pub fn rev_comp(self) -> Self {
+impl<const K: usize> RevComp for RawKmer<K, u16> {
+    fn rev_comp(self) -> Self {
         let mut res = !self.to_int().reverse_bits();
         res = (res >> 1 & 0x5555) | (res & 0x5555) << 1;
         Self::from_int(res >> (2 * (8 - K)))
@@ -154,8 +162,8 @@ impl<const K: usize> Kmer<K, u16> {
 }
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-impl<const K: usize> Kmer<K, u32> {
-    pub fn rev_comp(self) -> Self {
+impl<const K: usize> RevComp for RawKmer<K, u32> {
+    fn rev_comp(self) -> Self {
         let mut res = !self.to_int().reverse_bits();
         res = (res >> 1 & 0x5555_5555) | (res & 0x5555_5555) << 1;
         Self::from_int(res >> (2 * (16 - K)))
@@ -163,8 +171,8 @@ impl<const K: usize> Kmer<K, u32> {
 }
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-impl<const K: usize> Kmer<K, u64> {
-    pub fn rev_comp(self) -> Self {
+impl<const K: usize> RevComp for RawKmer<K, u64> {
+    fn rev_comp(self) -> Self {
         let mut res = !self.to_int().reverse_bits();
         res = (res >> 1 & 0x5555_5555_5555_5555) | (res & 0x5555_5555_5555_5555) << 1;
         Self::from_int(res >> (2 * (32 - K)))
@@ -172,8 +180,8 @@ impl<const K: usize> Kmer<K, u64> {
 }
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-impl<const K: usize> Kmer<K, u128> {
-    pub fn rev_comp(self) -> Self {
+impl<const K: usize> RevComp for RawKmer<K, u128> {
+    fn rev_comp(self) -> Self {
         let mut res = !self.to_int().reverse_bits();
         res = (res >> 1 & 0x5555_5555_5555_5555_5555_5555_5555_5555)
             | (res & 0x5555_5555_5555_5555_5555_5555_5555_5555) << 1;
@@ -182,8 +190,8 @@ impl<const K: usize> Kmer<K, u128> {
 }
 
 #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
-impl<const K: usize> Kmer<K, u8> {
-    pub fn rev_comp(self) -> Self {
+impl<const K: usize> RevComp for RawKmer<K, u8> {
+    fn rev_comp(self) -> Self {
         let mut res = !self.to_int();
         res = (res >> 4 & 0x0F) | (res & 0x0F) << 4;
         res = (res >> 2 & 0x33) | (res & 0x33) << 2;
@@ -192,8 +200,8 @@ impl<const K: usize> Kmer<K, u8> {
 }
 
 #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
-impl<const K: usize> Kmer<K, u16> {
-    pub fn rev_comp(self) -> Self {
+impl<const K: usize> RevComp for RawKmer<K, u16> {
+    fn rev_comp(self) -> Self {
         let mut res = !self.to_int().swap_bytes();
         res = (res >> 4 & 0x0F0F) | (res & 0x0F0F) << 4;
         res = (res >> 2 & 0x3333) | (res & 0x3333) << 2;
@@ -202,8 +210,8 @@ impl<const K: usize> Kmer<K, u16> {
 }
 
 #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
-impl<const K: usize> Kmer<K, u32> {
-    pub fn rev_comp(self) -> Self {
+impl<const K: usize> RevComp for RawKmer<K, u32> {
+    fn rev_comp(self) -> Self {
         let mut res = !self.to_int().swap_bytes();
         res = (res >> 4 & 0x0F0F_0F0F) | (res & 0x0F0F_0F0F) << 4;
         res = (res >> 2 & 0x3333_3333) | (res & 0x3333_3333) << 2;
@@ -212,8 +220,8 @@ impl<const K: usize> Kmer<K, u32> {
 }
 
 #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
-impl<const K: usize> Kmer<K, u64> {
-    pub fn rev_comp(self) -> Self {
+impl<const K: usize> RevComp for RawKmer<K, u64> {
+    fn rev_comp(self) -> Self {
         let mut res = !self.to_int().swap_bytes();
         res = (res >> 4 & 0x0F0F_0F0F_0F0F_0F0F) | (res & 0x0F0F_0F0F_0F0F_0F0F) << 4;
         res = (res >> 2 & 0x3333_3333_3333_3333) | (res & 0x3333_3333_3333_3333) << 2;
@@ -222,8 +230,8 @@ impl<const K: usize> Kmer<K, u64> {
 }
 
 #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
-impl<const K: usize> Kmer<K, u128> {
-    pub fn rev_comp(self) -> Self {
+impl<const K: usize> RevComp for RawKmer<K, u128> {
+    fn rev_comp(self) -> Self {
         let mut res = !self.to_int().swap_bytes();
         res = (res >> 4 & 0x0F0F_0F0F_0F0F_0F0F_0F0F_0F0F_0F0F_0F0F)
             | (res & 0x0F0F_0F0F_0F0F_0F0F_0F0F_0F0F_0F0F_0F0F) << 4;
@@ -239,61 +247,61 @@ mod tests {
 
     #[test]
     fn test_rc_8() {
-        let kmer = Kmer::<4, u8>::from_nucs(b"ATCG");
+        let kmer = RawKmer::<4, u8>::from_nucs(b"ATCG");
         assert_eq!(kmer.rev_comp().to_nucs(), *b"CGAT");
     }
     #[test]
     fn test_rc_16() {
-        let kmer = Kmer::<4, u16>::from_nucs(b"ATCG");
+        let kmer = RawKmer::<4, u16>::from_nucs(b"ATCG");
         assert_eq!(kmer.rev_comp().to_nucs(), *b"CGAT");
     }
     #[test]
     fn test_rc_32() {
-        let kmer = Kmer::<11, u32>::from_nucs(b"CATAATCCAGC");
+        let kmer = RawKmer::<11, u32>::from_nucs(b"CATAATCCAGC");
         assert_eq!(kmer.rev_comp().to_nucs(), *b"GCTGGATTATG");
     }
     #[test]
     fn test_rc_64() {
-        let kmer = Kmer::<11, u64>::from_nucs(b"CATAATCCAGC");
+        let kmer = RawKmer::<11, u64>::from_nucs(b"CATAATCCAGC");
         assert_eq!(kmer.rev_comp().to_nucs(), *b"GCTGGATTATG");
     }
     #[test]
     fn test_rc_128() {
-        let kmer = Kmer::<11, u128>::from_nucs(b"CATAATCCAGC");
+        let kmer = RawKmer::<11, u128>::from_nucs(b"CATAATCCAGC");
         assert_eq!(kmer.rev_comp().to_nucs(), *b"GCTGGATTATG");
     }
     #[test]
     fn rc_rc_8() {
         for i in 0..64 {
-            let kmer = Kmer::<3, u8>::from_int(i);
+            let kmer = RawKmer::<3, u8>::from_int(i);
             assert_eq!(kmer.rev_comp().rev_comp().to_int(), i);
         }
     }
     #[test]
     fn rc_rc_16() {
         for i in 0..16384 {
-            let kmer = Kmer::<7, u16>::from_int(i);
+            let kmer = RawKmer::<7, u16>::from_int(i);
             assert_eq!(kmer.rev_comp().rev_comp().to_int(), i);
         }
     }
     #[test]
     fn rc_rc_32() {
         for i in 0..1_000_000 {
-            let kmer = Kmer::<15, u32>::from_int(i);
+            let kmer = RawKmer::<15, u32>::from_int(i);
             assert_eq!(kmer.rev_comp().rev_comp().to_int(), i);
         }
     }
     #[test]
     fn rc_rc_64() {
         for i in 0..1_000_000 {
-            let kmer = Kmer::<15, u64>::from_int(i);
+            let kmer = RawKmer::<15, u64>::from_int(i);
             assert_eq!(kmer.rev_comp().rev_comp().to_int(), i);
         }
     }
     #[test]
     fn rc_rc_128() {
         for i in 0..1_000_000 {
-            let kmer = Kmer::<15, u128>::from_int(i);
+            let kmer = RawKmer::<15, u128>::from_int(i);
             assert_eq!(kmer.rev_comp().rev_comp().to_int(), i);
         }
     }
