@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 mod bloom;
+mod dashbloom;
 mod kmer;
+mod lock;
 mod minimizer;
 mod reads;
 use bloom::{BloomFilter, CascadingBloomFilter};
