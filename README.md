@@ -2,7 +2,7 @@
 
 `cargo r -r -- file.fasta`
 
-## Developper's notes
+## Developer's notes
 
 Minimizers are computed using a monotone queue, the order is based on a hash function which can be seeded using the `new_with_seed` method.
 
