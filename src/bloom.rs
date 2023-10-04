@@ -6,7 +6,7 @@ use rand::{Rng, SeedableRng};
 
 pub struct BloomFilter {
     size: usize,
-    k: usize,
+    n_hashes: usize,
     bv: BitVec,
     hash_builders: (RandomState, RandomState),
 }
@@ -16,11 +16,11 @@ impl BloomFilter {
     const BLOCK_MASK: usize = Self::BLOCK_SIZE - 1;
     const BLOCK_PREFIX: usize = !Self::BLOCK_MASK;
 
-    pub fn new_with_seed(size: usize, k: usize, seed: usize) -> Self {
+    pub fn new_with_seed(size: usize, n_hashes: usize, seed: usize) -> Self {
         let size = size.saturating_add(Self::BLOCK_SIZE - 1) / Self::BLOCK_SIZE * Self::BLOCK_SIZE;
         Self {
             size,
-            k,
+            n_hashes,
             bv: BitVec::from_elem(size, false),
             hash_builders: (
                 RandomState::with_seed(seed),
@@ -29,8 +29,8 @@ impl BloomFilter {
         }
     }
 
-    pub fn new(size: usize, k: usize) -> Self {
-        Self::new_with_seed(size, k, size + k)
+    pub fn new(size: usize, n_hashes: usize) -> Self {
+        Self::new_with_seed(size, n_hashes, size + n_hashes)
     }
 
     fn hashes<T: Hash>(&self, x: T) -> (u64, u64) {
@@ -42,14 +42,14 @@ impl BloomFilter {
     }
 
     fn indices<T: Hash>(&self, x: T) -> Vec<usize> {
-        let mut res = vec![0; self.k];
+        let mut res = vec![0; self.n_hashes];
         let (h0, h1) = self.hashes(x);
         let u = h0 as usize % self.size;
         let v = h1 as usize;
         let block_addr = u & Self::BLOCK_PREFIX;
         let mut local_addr = u;
         res[0] = u;
-        for i in 1..self.k {
+        for i in 1..self.n_hashes {
             local_addr = (local_addr + v) & Self::BLOCK_MASK;
             res[i] = block_addr | local_addr;
         }
@@ -88,7 +88,7 @@ impl CascadingBloomFilter {
         let bfs = sizes
             .iter()
             .zip(ks.iter())
-            .map(|(&size, &k)| BloomFilter::new_with_seed(size, k, rng.gen()))
+            .map(|(&size, &n_hashes)| BloomFilter::new_with_seed(size, n_hashes, rng.gen()))
             .collect();
         Self { bfs }
     }
@@ -117,8 +117,8 @@ mod tests {
     #[test]
     fn test_bloom() {
         let size = 1 << 20;
-        let k = 4;
-        let mut bf = BloomFilter::new(size, k);
+        let n_hashes = 4;
+        let mut bf = BloomFilter::new(size, n_hashes);
         for x in 0..10 {
             bf.insert(x);
         }
