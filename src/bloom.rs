@@ -110,6 +110,82 @@ impl CascadingBloomFilter {
     }
 }
 
+pub struct CountingBloomFilter {
+    size: usize,
+    n_hashes: usize,
+    counts: Vec<u8>,
+    hash_builders: (RandomState, RandomState),
+}
+
+impl CountingBloomFilter {
+    const BLOCK_SIZE: usize = 1 << (12 - 3);
+    const BLOCK_MASK: usize = Self::BLOCK_SIZE - 1;
+    const BLOCK_PREFIX: usize = !Self::BLOCK_MASK;
+
+    pub fn new_with_seed(size: usize, n_hashes: usize, seed: usize) -> Self {
+        let size = size.saturating_add(Self::BLOCK_SIZE - 1) / Self::BLOCK_SIZE * Self::BLOCK_SIZE;
+        Self {
+            size,
+            n_hashes,
+            counts: vec![0; size],
+            hash_builders: (
+                RandomState::with_seed(seed),
+                RandomState::with_seed(seed + 1),
+            ),
+        }
+    }
+
+    pub fn new(size: usize, n_hashes: usize) -> Self {
+        Self::new_with_seed(size, n_hashes, size + n_hashes)
+    }
+
+    fn hashes<T: Hash>(&self, x: T) -> (u64, u64) {
+        let mut state_0 = self.hash_builders.0.build_hasher();
+        let mut state_1 = self.hash_builders.1.build_hasher();
+        x.hash(&mut state_0);
+        x.hash(&mut state_1);
+        (state_0.finish(), state_1.finish())
+    }
+
+    fn indices<T: Hash>(&self, x: T) -> Vec<usize> {
+        let mut res = vec![0; self.n_hashes];
+        let (h0, h1) = self.hashes(x);
+        let u = h0 as usize % self.size;
+        let v = h1 as usize;
+        let block_addr = u & Self::BLOCK_PREFIX;
+        let mut local_addr = u;
+        res[0] = u;
+        for i in 1..self.n_hashes {
+            local_addr = (local_addr + v) & Self::BLOCK_MASK;
+            res[i] = block_addr | local_addr;
+        }
+        res
+    }
+
+    pub fn count<T: Hash>(&self, x: T) -> u8 {
+        self.indices(x)
+            .iter()
+            .map(|&i| self.counts[i])
+            .min()
+            .unwrap_or(0)
+    }
+
+    pub fn add<T: Hash>(&mut self, x: T) {
+        self.indices(x).iter().for_each(|&i| self.counts[i] += 1);
+    }
+
+    pub fn add_and_count<T: Hash>(&mut self, x: T) -> u8 {
+        self.indices(x)
+            .iter()
+            .map(|&i| {
+                self.counts[i] += 1;
+                self.counts[i]
+            })
+            .min()
+            .unwrap_or(0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
