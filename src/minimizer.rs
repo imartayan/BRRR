@@ -1,26 +1,30 @@
 use crate::kmer::{Base, Kmer};
-use core::hash::{BuildHasher, BuildHasherDefault, Hasher};
+use ahash::RandomState;
+use core::hash::{BuildHasher, Hasher};
 use core::marker::PhantomData;
-use rustc_hash::FxHasher;
 use std::collections::VecDeque;
 
 pub struct MinimizerQueue<const M: usize, T: Base, MT: Kmer<M, T>> {
     deq: VecDeque<(MT, u8)>,
-    hash_builder: BuildHasherDefault<FxHasher>,
+    hash_builder: RandomState,
     width: u8,
     time: u8,
     _phantom: PhantomData<T>,
 }
 
 impl<const M: usize, T: Base, MT: Kmer<M, T>> MinimizerQueue<M, T, MT> {
-    pub fn new(k: usize) -> Self {
+    pub fn new_with_seed(k: usize, seed: usize) -> Self {
         Self {
             deq: VecDeque::with_capacity(k - M + 1),
-            hash_builder: Default::default(),
+            hash_builder: RandomState::with_seed(seed),
             width: (k - M + 1) as u8,
             time: 0,
             _phantom: PhantomData,
         }
+    }
+
+    pub fn new(k: usize) -> Self {
+        Self::new_with_seed(k, k + M)
     }
 
     pub fn get_min(&self) -> MT {
