@@ -123,18 +123,18 @@ pub struct CascadingBloomFilter {
 }
 
 impl CascadingBloomFilter {
-    pub fn new_with_seed(sizes: &[usize], ks: &[usize], seed: u64) -> Self {
+    pub fn new_with_seed(sizes: &[usize], ns_hashes: &[usize], seed: u64) -> Self {
         let mut rng = SmallRng::seed_from_u64(seed);
         let bfs = sizes
             .iter()
-            .zip(ks.iter())
+            .zip(ns_hashes.iter())
             .map(|(&size, &n_hashes)| BloomFilter::new_with_seed(size, n_hashes, rng.gen()))
             .collect();
         Self { bfs }
     }
 
-    pub fn new(sizes: &[usize], ks: &[usize]) -> Self {
-        Self::new_with_seed(sizes, ks, 101010)
+    pub fn new(sizes: &[usize], ns_hashes: &[usize]) -> Self {
+        Self::new_with_seed(sizes, ns_hashes, 101010)
     }
 
     pub fn contains<T: Hash>(&self, x: T) -> bool {
@@ -173,8 +173,8 @@ mod tests {
     #[test]
     fn test_cascading() {
         let sizes = &[1 << 20, 1 << 19, 1 << 18];
-        let ks = &[4, 2, 1];
-        let cbf = CascadingBloomFilter::new(sizes, ks);
+        let ns_hashes = &[4, 2, 1];
+        let cbf = CascadingBloomFilter::new(sizes, ns_hashes);
         for x in 0..30 {
             cbf.insert(x);
         }
