@@ -171,14 +171,16 @@ impl CountingBloomFilter {
     }
 
     pub fn add<T: Hash>(&mut self, x: T) {
-        self.indices(x).iter().for_each(|&i| self.counts[i] += 1);
+        self.indices(x)
+            .iter()
+            .for_each(|&i| self.counts[i] = self.counts[i].saturating_add(1));
     }
 
     pub fn add_and_count<T: Hash>(&mut self, x: T) -> u8 {
         self.indices(x)
             .iter()
             .map(|&i| {
-                self.counts[i] += 1;
+                self.counts[i] = self.counts[i].saturating_add(1);
                 self.counts[i]
             })
             .min()

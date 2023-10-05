@@ -230,7 +230,9 @@ impl CountingBloomFilter {
     pub fn add<T: Hash>(&self, x: T) {
         let (shard_idx, indices) = self.shard_indices(x);
         let mut shard = unsafe { self._yield_write_shard(shard_idx) };
-        indices.iter().for_each(|&i| shard[i] += 1);
+        indices
+            .iter()
+            .for_each(|&i| shard[i] = shard[i].saturating_add(1));
     }
 
     pub fn add_and_count<T: Hash>(&self, x: T) -> u8 {
@@ -239,7 +241,7 @@ impl CountingBloomFilter {
         indices
             .iter()
             .map(|&i| {
-                shard[i] += 1;
+                shard[i] = shard[i].saturating_add(1);
                 shard[i]
             })
             .min()
