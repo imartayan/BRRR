@@ -302,4 +302,30 @@ mod tests {
             assert!(!cbf.contains(x));
         }
     }
+
+    #[test]
+    fn test_counting() {
+        let cbf = CountingBloomFilter::new(1 << 20, 3);
+        for x in 0..30 {
+            cbf.add(x);
+        }
+        for x in 0..20 {
+            cbf.add(x);
+        }
+        for x in 0..10 {
+            cbf.add(x);
+        }
+        for x in 0..10 {
+            assert_eq!(cbf.count(x), 3);
+        }
+        for x in 10..20 {
+            assert_eq!(cbf.count(x), 2);
+        }
+        for x in 20..30 {
+            assert_eq!(cbf.count(x), 1);
+        }
+        for x in 30..40 {
+            assert_eq!(cbf.count(x), 0);
+        }
+    }
 }
