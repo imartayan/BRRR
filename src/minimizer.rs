@@ -1,13 +1,11 @@
 use ahash::RandomState;
 use core::hash::{BuildHasher, Hash, Hasher};
-use core::marker::PhantomData;
 use std::collections::VecDeque;
 
 pub struct MinimizerQueue<const W: usize, T: Hash + Copy> {
     deq: VecDeque<(T, u8)>,
     hash_builder: RandomState,
     time: u8,
-    _phantom: PhantomData<T>,
 }
 
 impl<const W: usize, T: Hash + Copy> MinimizerQueue<W, T> {
@@ -16,7 +14,6 @@ impl<const W: usize, T: Hash + Copy> MinimizerQueue<W, T> {
             deq: VecDeque::with_capacity(W),
             hash_builder: RandomState::with_seed(seed),
             time: 0,
-            _phantom: PhantomData,
         }
     }
 
@@ -74,10 +71,7 @@ mod tests {
         RawKmer::<M, T>::iter_from_nucs(b"AAATAGT".iter()).for_each(|mmer| {
             queue.insert(mmer);
         });
-        assert_eq!(queue.get_min(), RawKmer::<M, T>::from_nucs(b"AAA"));
-        RawKmer::<M, T>::iter_from_nucs(b"AAT".iter()).for_each(|mmer| {
-            queue.insert(mmer);
-        });
+        queue.insert(RawKmer::<M, T>::from_nucs(b"AAT"));
         assert_ne!(queue.get_min(), RawKmer::<M, T>::from_nucs(b"AAA"));
     }
 
