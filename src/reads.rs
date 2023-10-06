@@ -23,7 +23,7 @@ pub trait ReadProcess {
     fn parallel_process_result<
         R: Default + Send,
         F: Send + Sync + Fn(Iter<u8>, &mut R),
-        G: Fn(&mut R),
+        G: FnMut(&mut R),
     >(
         self,
         threads: u32,
@@ -57,13 +57,13 @@ impl ReadProcess for Fasta {
     fn parallel_process_result<
         R: Default + Send,
         F: Send + Sync + Fn(Iter<u8>, &mut R),
-        G: Fn(&mut R),
+        G: FnMut(&mut R),
     >(
         self,
         threads: u32,
         queue_len: usize,
         f: F,
-        handle_result: G,
+        mut handle_result: G,
     ) {
         read_process_fasta_records(
             self.reader,
