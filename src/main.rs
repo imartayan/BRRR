@@ -79,6 +79,9 @@ fn main() {
         8,
         32,
         |nucs, (buffer, n_errors, n_corrections): &mut (Vec<char>, usize, usize)| {
+            buffer.clear();
+            *n_errors = 0;
+            *n_corrections = 0;
             let mut error_len = 0;
             let mut weak_bases: Vec<KT> = Vec::new();
             let mut solid_bases: Vec<KT> = Vec::new();
