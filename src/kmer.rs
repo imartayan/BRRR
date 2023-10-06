@@ -39,20 +39,30 @@ pub trait Kmer<const K: usize, T: Base>: Sized + Copy + RevComp + Ord + Hash {
     fn canonical(self) -> Self {
         min(self, self.rev_comp())
     }
-    fn from_nucs(nucs: &[u8]) -> Self {
-        nucs.iter()
-            .filter_map(T::from_nuc)
-            .take(K)
-            .fold(Self::new(), |s, base| s.extend(base))
+    #[inline]
+    fn from_bases_iter<I: Iterator<Item = T>>(bases: I) -> Self {
+        bases.take(K).fold(Self::new(), |s, base| s.extend(base))
     }
-    fn to_nucs(self) -> [u8; K] {
-        let mut res = [0u8; K];
+    #[inline]
+    fn from_bases(bases: &[T]) -> Self {
+        Self::from_bases_iter(bases.iter().map(|&base| base))
+    }
+    fn to_bases(self) -> [T; K] {
+        let mut res = [T::zero(); K];
         let mut s = self.to_int();
         for i in 0..K {
-            res[K - 1 - i] = (s & T::BASE_MASK).to_nuc();
+            res[K - 1 - i] = s & T::BASE_MASK;
             s = s >> 2;
         }
         res
+    }
+    #[inline]
+    fn from_nucs(nucs: &[u8]) -> Self {
+        Self::from_bases_iter(nucs.iter().filter_map(T::from_nuc))
+    }
+    #[inline]
+    fn to_nucs(self) -> [u8; K] {
+        self.to_bases().map(|base| base.to_nuc())
     }
     fn iter_from_bases<I: Iterator<Item = T>>(bases: I) -> KmerIterator<K, T, Self, I> {
         KmerIterator {
@@ -61,10 +71,11 @@ pub trait Kmer<const K: usize, T: Base>: Sized + Copy + RevComp + Ord + Hash {
             init: false,
         }
     }
+    #[inline]
     fn iter_from_nucs<'a, I: Iterator<Item = &'a u8>>(
         nucs: I,
     ) -> KmerIterator<K, T, Self, FilterMap<I, fn(&u8) -> Option<T>>> {
-        Self::iter_from_bases(nucs.filter_map(<T>::from_nuc))
+        Self::iter_from_bases(nucs.filter_map(T::from_nuc))
     }
 }
 
