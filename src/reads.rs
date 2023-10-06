@@ -20,6 +20,17 @@ impl Fasta {
 pub trait ReadProcess {
     fn process<F: FnMut(Iter<u8>)>(self, f: F);
     fn parallel_process<F: Send + Sync + Fn(Iter<u8>)>(self, threads: u32, queue_len: usize, f: F);
+    fn parallel_process_result<
+        R: Default + Send,
+        F: Send + Sync + Fn(Iter<u8>, &mut R),
+        G: Fn(&mut R),
+    >(
+        self,
+        threads: u32,
+        queue_len: usize,
+        f: F,
+        handle_result: G,
+    );
 }
 
 impl ReadProcess for Fasta {
@@ -39,6 +50,32 @@ impl ReadProcess for Fasta {
                 f(record.seq().iter());
             },
             |_, _| None::<()>,
+        )
+        .unwrap();
+    }
+
+    fn parallel_process_result<
+        R: Default + Send,
+        F: Send + Sync + Fn(Iter<u8>, &mut R),
+        G: Fn(&mut R),
+    >(
+        self,
+        threads: u32,
+        queue_len: usize,
+        f: F,
+        handle_result: G,
+    ) {
+        read_process_fasta_records(
+            self.reader,
+            threads,
+            queue_len,
+            |record: RefRecord, result: &mut R| {
+                f(record.seq().iter(), result);
+            },
+            |_, result| {
+                handle_result(result);
+                None::<()>
+            },
         )
         .unwrap();
     }
