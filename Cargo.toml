@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 ahash = "0.8.3"
 bit-vec = "0.6.3"
+derive_more = "0.99.17"
 lock_api = "0.4.10"
 num-traits = "0.2.15"
 parking_lot_core = "0.9.8"
