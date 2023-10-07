@@ -8,6 +8,7 @@ mod mutation;
 mod reads;
 use core::cmp;
 use dashbloom::CountingBloomFilter;
+use derive_more::AddAssign;
 use kmer::{Base, Kmer, RawKmer};
 use minimizer::MinimizerQueue;
 use mutation::Mutation;
@@ -19,6 +20,13 @@ const M: usize = 21;
 const W: usize = K - M + 1;
 type KT = u64;
 type MT = u64;
+
+#[derive(Clone, Copy, Default, AddAssign)]
+struct Stats {
+    errors: usize,
+    long_errors: usize,
+    corrections: usize,
+}
 
 fn main() {
     /* CLI
@@ -73,15 +81,13 @@ fn main() {
     });
 
     let reads = Fasta::from_file(filename);
-    let mut total_errors = 0usize;
-    let mut total_corrections = 0usize;
+    let mut global_stats = Stats::default();
     reads.parallel_process_result(
         8,
         32,
-        |nucs, (buffer, n_errors, n_corrections): &mut (Vec<char>, usize, usize)| {
+        |nucs, (buffer, stats): &mut (Vec<char>, Stats)| {
             buffer.clear();
-            *n_errors = 0;
-            *n_corrections = 0;
+            *stats = Stats::default();
             let mut error_len = 0;
             let mut weak_bases: Vec<KT> = Vec::new();
             let mut solid_bases: Vec<KT> = Vec::new();
@@ -89,7 +95,8 @@ fn main() {
             RawKmer::<K, KT>::iter_from_nucs(nucs).for_each(|kmer| {
                 if solid_kmer(kmer) {
                     if error_len > 0 {
-                        if error_len >= validation_threshold {
+                        if error_len >= K - 1 {
+                            stats.long_errors += 1;
                             let success =
                                 try_deletion(&mut weak_bases, solid_kmer, validation_threshold)
                                     || try_substitution(
@@ -103,7 +110,7 @@ fn main() {
                                         validation_threshold,
                                     );
                             if success {
-                                *n_corrections += 1;
+                                stats.corrections += 1;
                             }
                         }
                         buffer.extend(
@@ -116,9 +123,9 @@ fn main() {
                     }
                 } else {
                     if error_len == 0 {
+                        stats.errors += 1;
                         buffer.extend(solid_bases.drain(..).map(|base| base.to_nuc() as char)); // range ?
                         weak_bases = kmer.to_bases().to_vec();
-                        *n_errors += 1;
                     } else {
                         weak_bases.push(kmer.to_int() & KT::BASE_MASK);
                     }
@@ -126,14 +133,14 @@ fn main() {
                 }
             })
         },
-        |(_buffer, n_errors, n_corrections)| {
+        |(_buffer, stats)| {
             // TODO write buffer
-            total_errors += *n_errors;
-            total_corrections += *n_corrections;
+            global_stats += *stats;
         },
     );
-    println!("{} errors in total", total_errors);
-    println!("{} corrections in total", total_corrections);
+    println!("{} errors in total", global_stats.errors);
+    println!("{} long errors in total", global_stats.long_errors);
+    println!("{} corrections in total", global_stats.corrections);
 }
 
 fn validate<I: Iterator<Item = KT>, F: Fn(RawKmer<K, KT>) -> bool>(bases: I, solid: F) -> bool {
