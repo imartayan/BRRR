@@ -50,6 +50,10 @@ impl BloomFilter {
         Self::new_with_seed_and_shard_amount(size, n_hashes, seed, shard_amount)
     }
 
+    pub fn new_with_shard_amount(size: usize, n_hashes: usize, shard_amount: usize) -> Self {
+        Self::new_with_seed_and_shard_amount(size, n_hashes, size + n_hashes, shard_amount)
+    }
+
     pub fn new(size: usize, n_hashes: usize) -> Self {
         Self::new_with_seed(size, n_hashes, size + n_hashes)
     }
@@ -123,14 +127,34 @@ pub struct CascadingBloomFilter {
 }
 
 impl CascadingBloomFilter {
-    pub fn new_with_seed(sizes: &[usize], ns_hashes: &[usize], seed: u64) -> Self {
+    pub fn new_with_seed_and_shard_amount(
+        sizes: &[usize],
+        ns_hashes: &[usize],
+        seed: u64,
+        shard_amount: usize,
+    ) -> Self {
         let mut rng = SmallRng::seed_from_u64(seed);
         let bfs = sizes
             .iter()
             .zip(ns_hashes.iter())
-            .map(|(&size, &n_hashes)| BloomFilter::new_with_seed(size, n_hashes, rng.gen()))
+            .map(|(&size, &n_hashes)| {
+                BloomFilter::new_with_seed_and_shard_amount(size, n_hashes, rng.gen(), shard_amount)
+            })
             .collect();
         Self { bfs }
+    }
+
+    pub fn new_with_seed(sizes: &[usize], ns_hashes: &[usize], seed: u64) -> Self {
+        let shard_amount = std::thread::available_parallelism().map_or(1, usize::from) * 4;
+        Self::new_with_seed_and_shard_amount(sizes, ns_hashes, seed, shard_amount)
+    }
+
+    pub fn new_with_shard_amount(
+        sizes: &[usize],
+        ns_hashes: &[usize],
+        shard_amount: usize,
+    ) -> Self {
+        Self::new_with_seed_and_shard_amount(sizes, ns_hashes, 101010, shard_amount)
     }
 
     pub fn new(sizes: &[usize], ns_hashes: &[usize]) -> Self {
@@ -191,6 +215,10 @@ impl CountingBloomFilter {
     pub fn new_with_seed(size: usize, n_hashes: usize, seed: usize) -> Self {
         let shard_amount = std::thread::available_parallelism().map_or(1, usize::from) * 4;
         Self::new_with_seed_and_shard_amount(size, n_hashes, seed, shard_amount)
+    }
+
+    pub fn new_with_shard_amount(size: usize, n_hashes: usize, shard_amount: usize) -> Self {
+        Self::new_with_seed_and_shard_amount(size, n_hashes, size + n_hashes, shard_amount)
     }
 
     pub fn new(size: usize, n_hashes: usize) -> Self {
