@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 ahash = "0.8.3"
 bit-vec = "0.6.3"
+clap = { version = "4.4.6", features = ["derive"] }
 derive_more = "0.99.17"
 lock_api = "0.4.10"
 num-traits = "0.2.15"
