@@ -6,6 +6,7 @@ mod lock;
 mod minimizer;
 mod mutation;
 mod reads;
+use clap::Parser;
 use core::cmp;
 use dashbloom::CountingBloomFilter;
 use derive_more::AddAssign;
@@ -13,13 +14,36 @@ use kmer::{Base, Kmer, RawKmer};
 use minimizer::MinimizerQueue;
 use mutation::Mutation;
 use reads::{Fasta, ReadProcess};
-use std::env;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 
-const K: usize = 31;
-const M: usize = 21;
+// Loads runtime-provided constants for which declarations
+// will be generated at `$OUT_DIR/constants.rs`.
+pub mod constants {
+    include!(concat!(env!("OUT_DIR"), "/constants.rs"));
+}
+use constants::{K, KT, M, MT};
+
 const W: usize = K - M + 1;
-type KT = u64;
-type MT = u64;
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Input file
+    input: String,
+    /// Output file (otherwise append ".cor" to input file)
+    #[clap(short, long)]
+    output: Option<String>,
+    /// Threads (use all threads by default)
+    #[clap(short, long)]
+    threads: Option<usize>,
+    /// Abundance above which k-mers are solid
+    #[clap(short, long, default_value_t = 3)]
+    abundance: u8,
+    /// Numbers of solid k-mers required to validate a correction
+    #[clap(short, long, default_value_t = 3)]
+    validation: usize,
+}
 
 #[derive(Clone, Copy, Default, AddAssign)]
 struct Stats {
@@ -29,25 +53,33 @@ struct Stats {
 }
 
 fn main() {
-    /* CLI
-    - input (mandatory)
-    - output (_corrected)
-    - abundance threshold (3)
-    - validation threshold (3)
-    - threads (max)
-     */
-    let args: Vec<String> = env::args().collect();
-    let filename = args.get(1).expect("No filename given").as_str();
+    let args = Args::parse();
+    let input_filename = args.input.as_str();
+    let output_filename = if let Some(filename) = args.output {
+        filename
+    } else {
+        if let Some((begin, end)) = input_filename.rsplit_once('.') {
+            begin.to_owned() + ".cor." + end
+        } else {
+            input_filename.to_owned() + ".cor"
+        }
+    };
+    let threads = if let Some(num) = args.threads {
+        num
+    } else {
+        std::thread::available_parallelism().map_or(1, |x| x.get())
+    };
+    let shard_amount = threads * 4;
+    let min_threshold = args.abundance - (args.abundance / 2);
+    let kmer_threshold = args.abundance - (args.abundance / 2);
+
     let size = 100_000_000;
-    let min_counts = CountingBloomFilter::new(size, 3);
-    let kmer_counts = CountingBloomFilter::new(size, 3);
-    let min_threshold = 2;
-    let kmer_threshold = 3;
-    let validation_threshold = 3;
+    let min_counts = CountingBloomFilter::new_with_shard_amount(size, 3, shard_amount);
+    let kmer_counts = CountingBloomFilter::new_with_shard_amount(size, 3, shard_amount);
     let solid_kmer = |kmer: RawKmer<K, KT>| kmer_counts.count(kmer.canonical()) >= kmer_threshold; // canonize ?
 
-    let reads = Fasta::from_file(filename);
-    reads.parallel_process(8, 32, |nucs| {
+    let reads = Fasta::from_file(input_filename);
+    reads.parallel_process(threads as u32, 32, |nucs| {
         let mut kmer = RawKmer::<K, KT>::new();
         let mut mmer = RawKmer::<M, MT>::new();
         let mut queue = MinimizerQueue::<W, _>::new();
@@ -80,12 +112,14 @@ fn main() {
         }
     });
 
-    let reads = Fasta::from_file(filename);
+    let reads = Fasta::from_file(input_filename);
+    let output = File::create(output_filename).expect("Failed to open output file");
+    let mut writer = BufWriter::new(output);
     let mut global_stats = Stats::default();
     reads.parallel_process_result(
-        8,
+        threads as u32,
         32,
-        |nucs, (buffer, stats): &mut (Vec<char>, Stats)| {
+        |nucs, (buffer, stats): &mut (Vec<u8>, Stats)| {
             buffer.clear();
             *stats = Stats::default();
             let mut error_len = 0;
@@ -98,33 +132,25 @@ fn main() {
                         if error_len >= K - 1 {
                             stats.long_errors += 1;
                             let success =
-                                try_deletion(&mut weak_bases, solid_kmer, validation_threshold)
+                                try_deletion(&mut weak_bases, solid_kmer, args.validation)
                                     || try_substitution(
                                         &mut weak_bases,
                                         solid_kmer,
-                                        validation_threshold,
+                                        args.validation,
                                     )
-                                    || try_insertion(
-                                        &mut weak_bases,
-                                        solid_kmer,
-                                        validation_threshold,
-                                    );
+                                    || try_insertion(&mut weak_bases, solid_kmer, args.validation);
                             if success {
                                 stats.corrections += 1;
                             }
                         }
-                        buffer.extend(
-                            weak_bases
-                                .drain((K - 1)..)
-                                .map(|base| base.to_nuc() as char),
-                        );
+                        buffer.extend(weak_bases.drain((K - 1)..).map(|base| base.to_nuc()));
                         solid_bases.push(kmer.to_int() & KT::BASE_MASK);
                         error_len = 0;
                     }
                 } else {
                     if error_len == 0 {
                         stats.errors += 1;
-                        buffer.extend(solid_bases.drain(..).map(|base| base.to_nuc() as char)); // range ?
+                        buffer.extend(solid_bases.drain(..).map(|base| base.to_nuc() as u8)); // range ?
                         weak_bases = kmer.to_bases().to_vec();
                     } else {
                         weak_bases.push(kmer.to_int() & KT::BASE_MASK);
@@ -133,8 +159,10 @@ fn main() {
                 }
             })
         },
-        |(_buffer, stats)| {
-            // TODO write buffer
+        |(buffer, stats)| {
+            writer.write(b">\n").expect("Failed to write newline");
+            writer.write(buffer).expect("Failed to write buffer");
+            writer.write(b"\n").expect("Failed to write newline");
             global_stats += *stats;
         },
     );
