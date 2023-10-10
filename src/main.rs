@@ -29,9 +29,9 @@ const W: usize = K - M + 1;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Input file
+    /// Input file (.fasta, .fa)
     input: String,
-    /// Output file (otherwise append ".cor" to input file)
+    /// Output file (otherwise create a file named <input>.cor.<ext>)
     #[clap(short, long)]
     output: Option<String>,
     /// Threads (use all threads by default)
@@ -73,8 +73,8 @@ fn main() {
         std::thread::available_parallelism().map_or(1, |x| x.get())
     };
     let shard_amount = threads * 4;
-    let min_threshold = args.abundance - (args.abundance / 2);
-    let kmer_threshold = args.abundance - (args.abundance / 2);
+    let min_threshold = (args.abundance + 1) / 2;
+    let kmer_threshold = args.abundance + 1 - min_threshold;
 
     let size = 100_000_000;
     let min_counts = CountingBloomFilter::new_with_seed_and_shard_amount(
