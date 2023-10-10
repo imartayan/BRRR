@@ -9,6 +9,7 @@
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=K");
+    println!("cargo:rerun-if-env-changed=M");
 
     let out_dir: std::path::PathBuf = std::env::var("OUT_DIR")
         .expect("Failed to obtain OUT_DIR")
@@ -19,7 +20,8 @@ fn main() {
         .unwrap_or_else(|_| "31".into())
         .parse()
         .expect("Failed to parse K");
-    assert!(k % 2 == 1, "K must be odd!");
+    assert!(k >= 1, "K must be ≥ 1");
+    assert!(k % 2 == 1, "K must be odd");
     code.push(format!("pub const K: usize = {k};"));
 
     let kmer_bits = 2 * k;
@@ -32,7 +34,8 @@ fn main() {
         .unwrap_or_else(|_| "21".into())
         .parse()
         .expect("Failed to parse M");
-    assert!(m % 2 == 1, "M must be odd!");
+    assert!(m >= 1, "M must be ≥ 1");
+    assert!(m % 2 == 1, "M must be odd");
     code.push(format!("pub const M: usize = {m};"));
 
     let mmer_bits = 2 * m;
@@ -40,6 +43,8 @@ fn main() {
 
     let mt = select_type(mmer_bits);
     code.push(format!("pub type MT = {mt};"));
+
+    assert!(k >= m, "K must be ≥ M (here K={k} and M={m})");
 
     std::fs::write(out_dir.join("constants.rs"), code.join("\n"))
         .expect("Failed to write const file");
