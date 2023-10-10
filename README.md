@@ -1,6 +1,27 @@
 # Brutal Read Rewrite in Rust
 
-`cargo r -r -- file.fasta`
+## Usage
+
+```md
+cargo r -r -- [OPTIONS] <INPUT>
+
+Arguments:
+  <INPUT>  Input file (.fasta, .fa)
+
+Options:
+  -o, --output <OUTPUT>          Output file (otherwise create a file named <input>.cor.<ext>)
+  -t, --threads <THREADS>        Threads (use all threads by default)
+  -a, --abundance <ABUNDANCE>    Abundance above which k-mers are solid [default: 3]
+  -v, --validation <VALIDATION>  Numbers of solid k-mers required to validate a correction [default: 3]
+  -s, --seed <SEED>              Seed used for hash functions [default: 101010]
+  -h, --help                     Print help
+  -V, --version                  Print version
+```
+
+By default `K=31` and `M=21` are fixed, but you can specify other values as follows:
+```sh
+K=15 M=7 cargo r -r -- [OPTIONS] <INPUT>
+```
 
 ## Developer's notes
 
