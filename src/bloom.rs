@@ -16,21 +16,22 @@ impl BloomFilter {
     const BLOCK_MASK: usize = Self::BLOCK_SIZE - 1;
     const BLOCK_PREFIX: usize = !Self::BLOCK_MASK;
 
-    pub fn new_with_seed(size: usize, n_hashes: usize, seed: usize) -> Self {
+    pub fn new_with_seed(size: usize, n_hashes: usize, seed: u64) -> Self {
         let size = size.saturating_add(Self::BLOCK_SIZE - 1) / Self::BLOCK_SIZE * Self::BLOCK_SIZE;
         Self {
             size,
             n_hashes,
             bv: BitVec::from_elem(size, false),
             hash_builders: (
-                RandomState::with_seed(seed),
-                RandomState::with_seed(seed + 1),
+                RandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3),
+                RandomState::with_seeds(seed + 4, seed + 5, seed + 6, seed + 7),
             ),
         }
     }
 
     pub fn new(size: usize, n_hashes: usize) -> Self {
-        Self::new_with_seed(size, n_hashes, size + n_hashes)
+        let seed = (size + n_hashes) as u64;
+        Self::new_with_seed(size, n_hashes, seed)
     }
 
     fn hashes<T: Hash>(&self, x: T) -> (u64, u64) {
@@ -122,21 +123,22 @@ impl CountingBloomFilter {
     const BLOCK_MASK: usize = Self::BLOCK_SIZE - 1;
     const BLOCK_PREFIX: usize = !Self::BLOCK_MASK;
 
-    pub fn new_with_seed(size: usize, n_hashes: usize, seed: usize) -> Self {
+    pub fn new_with_seed(size: usize, n_hashes: usize, seed: u64) -> Self {
         let size = size.saturating_add(Self::BLOCK_SIZE - 1) / Self::BLOCK_SIZE * Self::BLOCK_SIZE;
         Self {
             size,
             n_hashes,
             counts: vec![0; size],
             hash_builders: (
-                RandomState::with_seed(seed),
-                RandomState::with_seed(seed + 1),
+                RandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3),
+                RandomState::with_seeds(seed + 4, seed + 5, seed + 6, seed + 7),
             ),
         }
     }
 
     pub fn new(size: usize, n_hashes: usize) -> Self {
-        Self::new_with_seed(size, n_hashes, size + n_hashes)
+        let seed = (size + n_hashes) as u64;
+        Self::new_with_seed(size, n_hashes, seed)
     }
 
     fn hashes<T: Hash>(&self, x: T) -> (u64, u64) {
@@ -254,5 +256,27 @@ mod tests {
         for x in 30..40 {
             assert_eq!(cbf.count(x), 0);
         }
+    }
+
+    #[test]
+    fn test_seed_bloom() {
+        let size = 1 << 20;
+        let n_hashes = 4;
+        let seed = 42;
+        let x = 421;
+        let bf1 = BloomFilter::new_with_seed(size, n_hashes, seed);
+        let bf2 = BloomFilter::new_with_seed(size, n_hashes, seed);
+        assert_eq!(bf1.hashes(x), bf2.hashes(x));
+    }
+
+    #[test]
+    fn test_seed_counting() {
+        let size = 1 << 20;
+        let n_hashes = 4;
+        let seed = 42;
+        let x = 421;
+        let cbf1 = CountingBloomFilter::new_with_seed(size, n_hashes, seed);
+        let cbf2 = CountingBloomFilter::new_with_seed(size, n_hashes, seed);
+        assert_eq!(cbf1.hashes(x), cbf2.hashes(x));
     }
 }

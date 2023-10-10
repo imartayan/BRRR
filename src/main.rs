@@ -43,6 +43,9 @@ struct Args {
     /// Numbers of solid k-mers required to validate a correction
     #[clap(short, long, default_value_t = 3)]
     validation: usize,
+    /// Seed used for hash functions
+    #[clap(short, long, default_value_t = 101010)]
+    seed: u64,
 }
 
 #[derive(Clone, Copy, Default, AddAssign)]
@@ -74,15 +77,25 @@ fn main() {
     let kmer_threshold = args.abundance - (args.abundance / 2);
 
     let size = 100_000_000;
-    let min_counts = CountingBloomFilter::new_with_shard_amount(size, 3, shard_amount);
-    let kmer_counts = CountingBloomFilter::new_with_shard_amount(size, 3, shard_amount);
+    let min_counts = CountingBloomFilter::new_with_seed_and_shard_amount(
+        size,
+        3,
+        args.seed + M as u64,
+        shard_amount,
+    );
+    let kmer_counts = CountingBloomFilter::new_with_seed_and_shard_amount(
+        size,
+        3,
+        args.seed + K as u64,
+        shard_amount,
+    );
     let solid_kmer = |kmer: RawKmer<K, KT>| kmer_counts.count(kmer.canonical()) >= kmer_threshold; // canonize ?
 
     let reads = Fasta::from_file(input_filename);
     reads.parallel_process(threads as u32, 32, |nucs| {
         let mut kmer = RawKmer::<K, KT>::new();
         let mut mmer = RawKmer::<M, MT>::new();
-        let mut queue = MinimizerQueue::<W, _>::new();
+        let mut queue = MinimizerQueue::<W, _>::new_with_seed(args.seed + W as u64);
         let mut prev_min = RawKmer::<M, MT>::new();
         let mut min_is_solid = false;
         for (i, base) in nucs.filter_map(MT::from_nuc).enumerate() {

@@ -23,7 +23,7 @@ impl BloomFilter {
     pub fn new_with_seed_and_shard_amount(
         size: usize,
         n_hashes: usize,
-        seed: usize,
+        seed: u64,
         shard_amount: usize,
     ) -> Self {
         let shard_amount = shard_amount.next_power_of_two();
@@ -39,23 +39,25 @@ impl BloomFilter {
                 .map(|_| RwLock::new(BitVec::from_elem(shard_size, false)))
                 .collect(),
             hash_builders: (
-                RandomState::with_seed(seed),
-                RandomState::with_seed(seed + 1),
+                RandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3),
+                RandomState::with_seeds(seed + 4, seed + 5, seed + 6, seed + 7),
             ),
         }
     }
 
-    pub fn new_with_seed(size: usize, n_hashes: usize, seed: usize) -> Self {
+    pub fn new_with_seed(size: usize, n_hashes: usize, seed: u64) -> Self {
         let shard_amount = std::thread::available_parallelism().map_or(1, usize::from) * 4;
         Self::new_with_seed_and_shard_amount(size, n_hashes, seed, shard_amount)
     }
 
     pub fn new_with_shard_amount(size: usize, n_hashes: usize, shard_amount: usize) -> Self {
-        Self::new_with_seed_and_shard_amount(size, n_hashes, size + n_hashes, shard_amount)
+        let seed = (size + n_hashes) as u64;
+        Self::new_with_seed_and_shard_amount(size, n_hashes, seed, shard_amount)
     }
 
     pub fn new(size: usize, n_hashes: usize) -> Self {
-        Self::new_with_seed(size, n_hashes, size + n_hashes)
+        let seed = (size + n_hashes) as u64;
+        Self::new_with_seed(size, n_hashes, seed)
     }
 
     fn hashes<T: Hash>(&self, x: T) -> (u64, u64) {
@@ -190,7 +192,7 @@ impl CountingBloomFilter {
     pub fn new_with_seed_and_shard_amount(
         size: usize,
         n_hashes: usize,
-        seed: usize,
+        seed: u64,
         shard_amount: usize,
     ) -> Self {
         let shard_amount = shard_amount.next_power_of_two();
@@ -206,23 +208,25 @@ impl CountingBloomFilter {
                 .map(|_| RwLock::new(vec![0; shard_size]))
                 .collect(),
             hash_builders: (
-                RandomState::with_seed(seed),
-                RandomState::with_seed(seed + 1),
+                RandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3),
+                RandomState::with_seeds(seed + 4, seed + 5, seed + 6, seed + 7),
             ),
         }
     }
 
-    pub fn new_with_seed(size: usize, n_hashes: usize, seed: usize) -> Self {
+    pub fn new_with_seed(size: usize, n_hashes: usize, seed: u64) -> Self {
         let shard_amount = std::thread::available_parallelism().map_or(1, usize::from) * 4;
         Self::new_with_seed_and_shard_amount(size, n_hashes, seed, shard_amount)
     }
 
     pub fn new_with_shard_amount(size: usize, n_hashes: usize, shard_amount: usize) -> Self {
-        Self::new_with_seed_and_shard_amount(size, n_hashes, size + n_hashes, shard_amount)
+        let seed = (size + n_hashes) as u64;
+        Self::new_with_seed_and_shard_amount(size, n_hashes, seed, shard_amount)
     }
 
     pub fn new(size: usize, n_hashes: usize) -> Self {
-        Self::new_with_seed(size, n_hashes, size + n_hashes)
+        let seed = (size + n_hashes) as u64;
+        Self::new_with_seed(size, n_hashes, seed)
     }
 
     fn hashes<T: Hash>(&self, x: T) -> (u64, u64) {
@@ -335,7 +339,9 @@ mod tests {
 
     #[test]
     fn test_counting() {
-        let cbf = CountingBloomFilter::new(1 << 20, 3);
+        let size = 1 << 20;
+        let n_hashes = 4;
+        let cbf = CountingBloomFilter::new(size, n_hashes);
         for x in 0..30 {
             cbf.add(x);
         }
@@ -357,5 +363,27 @@ mod tests {
         for x in 30..40 {
             assert_eq!(cbf.count(x), 0);
         }
+    }
+
+    #[test]
+    fn test_seed_bloom() {
+        let size = 1 << 20;
+        let n_hashes = 4;
+        let seed = 42;
+        let x = 421;
+        let bf1 = BloomFilter::new_with_seed(size, n_hashes, seed);
+        let bf2 = BloomFilter::new_with_seed(size, n_hashes, seed);
+        assert_eq!(bf1.hashes(x), bf2.hashes(x));
+    }
+
+    #[test]
+    fn test_seed_counting() {
+        let size = 1 << 20;
+        let n_hashes = 4;
+        let seed = 42;
+        let x = 421;
+        let cbf1 = CountingBloomFilter::new_with_seed(size, n_hashes, seed);
+        let cbf2 = CountingBloomFilter::new_with_seed(size, n_hashes, seed);
+        assert_eq!(cbf1.hashes(x), cbf2.hashes(x));
     }
 }

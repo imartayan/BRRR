@@ -9,16 +9,16 @@ pub struct MinimizerQueue<const W: usize, T: Hash + Copy> {
 }
 
 impl<const W: usize, T: Hash + Copy> MinimizerQueue<W, T> {
-    pub fn new_with_seed(seed: usize) -> Self {
+    pub fn new_with_seed(seed: u64) -> Self {
         Self {
             deq: VecDeque::with_capacity(W),
-            hash_builder: RandomState::with_seed(seed),
+            hash_builder: RandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3),
             time: 0,
         }
     }
 
     pub fn new() -> Self {
-        Self::new_with_seed(W)
+        Self::new_with_seed(W as u64)
     }
 
     pub fn get_min(&self) -> T {
@@ -81,6 +81,17 @@ mod tests {
         let u = RawKmer::<M, T>::from_nucs(b"ACT");
         let h1 = queue.hash(u);
         let h2 = queue.hash(u);
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn test_seed() {
+        let seed = 42;
+        let q1 = MinimizerQueue::<W, _>::new_with_seed(seed);
+        let q2 = MinimizerQueue::<W, _>::new_with_seed(seed);
+        let u = RawKmer::<M, T>::from_nucs(b"ACT");
+        let h1 = q1.hash(u);
+        let h2 = q2.hash(u);
         assert_eq!(h1, h2);
     }
 }
