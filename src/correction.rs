@@ -20,37 +20,48 @@ pub fn correct<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>
 ) {
     buffer.clear();
     *stats = Stats::default();
-    let mut error_len = 0;
-    let mut weak_bases: Vec<T> = Vec::new();
-    let mut solid_bases: Vec<T> = Vec::new();
-    // reserve capacity ?
-    KmerT::iter_from_nucs(nucs).for_each(|kmer| {
-        if solid(kmer) {
-            if error_len > 0 {
-                if error_len >= K - 1 {
-                    stats.long_errors += 1;
-                    let success = try_deletion(&mut weak_bases, &solid, validation_threshold)
-                        || try_substitution(&mut weak_bases, &solid, validation_threshold)
-                        || try_insertion(&mut weak_bases, &solid, validation_threshold);
-                    if success {
-                        stats.corrections += 1;
-                    }
-                }
-                buffer.extend(weak_bases.drain((K - 1)..).map(|base| base.to_nuc()));
-                solid_bases.push(kmer.to_int() & T::BASE_MASK);
-                error_len = 0;
-            }
+    let mut kmer = KmerT::new();
+    let mut weak_bases = Vec::new();
+    let mut error_size = 0;
+    for (i, base) in nucs.filter_map(T::from_nuc).enumerate() {
+        if i < K - 1 {
+            kmer = kmer.extend(base);
+            buffer.push(base.to_nuc());
         } else {
-            if error_len == 0 {
-                stats.errors += 1;
-                buffer.extend(solid_bases.drain(..).map(|base| base.to_nuc() as u8)); // range ?
-                weak_bases = kmer.to_bases().to_vec();
-            } else {
-                weak_bases.push(kmer.to_int() & T::BASE_MASK);
+            kmer = kmer.append(base);
+            match (solid(kmer), error_size) {
+                (true, 0) => {
+                    buffer.push(base.to_nuc());
+                }
+                (false, 0) => {
+                    error_size = 1;
+                    stats.errors += 1;
+                    weak_bases = kmer.to_bases().to_vec();
+                }
+                (false, _) => {
+                    error_size += 1;
+                    weak_bases.push(base);
+                }
+                (true, _) => {
+                    if error_size >= K - 1 {
+                        stats.long_errors += 1;
+                        let success = try_deletion(&mut weak_bases, &solid, validation_threshold)
+                            || try_substitution(&mut weak_bases, &solid, validation_threshold)
+                            || try_insertion(&mut weak_bases, &solid, validation_threshold);
+                        if success {
+                            stats.corrections += 1;
+                        }
+                    }
+                    buffer.extend(weak_bases.drain((K - 1)..).map(|base| base.to_nuc()));
+                    error_size = 0;
+                    buffer.push(base.to_nuc());
+                }
             }
-            error_len += 1;
         }
-    })
+    }
+    if error_size > 0 {
+        buffer.extend(weak_bases.drain((K - 1)..).map(|base| base.to_nuc()));
+    }
 }
 
 fn validate<
