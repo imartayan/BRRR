@@ -36,6 +36,10 @@ pub trait Kmer<const K: usize, T: Base>: Sized + Copy + RevComp + Ord + Hash {
         T::bases().map(|base| self.append(base))
     }
     #[inline]
+    fn is_canonical(self) -> bool {
+        self < self.rev_comp()
+    }
+    #[inline]
     fn canonical(self) -> Self {
         min(self, self.rev_comp())
     }
@@ -128,12 +132,10 @@ macro_rules! impl_t {
         #[inline]
         fn to_nuc(self) -> u8 {
             const BASE_LOOKUP: [u8; 4] = [b'A', b'C', b'G', b'T'];
-            if self >= 4 {
-                panic!("Invalid base")
-            }
+            debug_assert!(self >= 4, "Invalid base");
             BASE_LOOKUP[self as usize]
         }
-        #[inline]
+        #[inline(always)]
         fn bases() -> [Self; 4] {
             [0, 1, 2, 3]
         }

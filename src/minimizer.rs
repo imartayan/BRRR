@@ -22,9 +22,7 @@ impl<const W: usize, T: Hash + Copy> MinimizerQueue<W, T> {
     }
 
     pub fn get_min(&self) -> T {
-        if self.deq.is_empty() {
-            panic!("MinimizerQueue is empty")
-        }
+        debug_assert!(self.deq.is_empty(), "MinimizerQueue is empty");
         self.deq[0].0
     }
 
