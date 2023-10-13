@@ -9,6 +9,7 @@ use std::slice::Iter;
 pub struct Stats {
     pub errors: usize,
     pub corrections: usize,
+    pub skipped_errors: usize,
 }
 
 pub fn correct<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>(
@@ -43,7 +44,7 @@ pub fn correct<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>
                     weak_bases.push(base);
                 }
                 (true, _) => {
-                    if error_size >= K - 1 && error_size <= 2 * K - 1 {
+                    if error_size > K / 2 && error_size < 2 * K {
                         stats.errors += 1;
                         if let Some((middle, d0, d1)) =
                             find_path(last_solid_kmer, kmer, error_size + 1, &solid)
@@ -53,6 +54,8 @@ pub fn correct<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>
                             weak_bases.extend_from_slice(&kmer.to_bases()[(K - d1)..(K - 1)]);
                             stats.corrections += 1;
                         }
+                    } else {
+                        stats.skipped_errors += 1;
                     }
                     buffer.extend(weak_bases.drain((K - 1)..).map(|base| base.to_nuc()));
                     error_size = 0;
