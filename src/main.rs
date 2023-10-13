@@ -13,7 +13,7 @@ use dashbloom::CountingBloomFilter;
 use kmer::{Base, Kmer, RawKmer};
 use minimizer::MinimizerQueue;
 use reads::{Fasta, ReadProcess};
-use std::fs::File;
+use std::fs::{metadata, File};
 use std::io::{BufWriter, Write};
 
 // Loads runtime-provided constants for which declarations
@@ -26,24 +26,27 @@ use constants::{K, KT, M, MT};
 const W: usize = K - M + 1;
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None)]
 struct Args {
     /// Input file (.fasta, .fa)
     input: String,
-    /// Output file (otherwise create a file named <input>.cor.<ext>)
-    #[clap(short, long)]
+    /// Output file (defaults to <input>.cor.<ext>)
+    #[arg(short, long)]
     output: Option<String>,
-    /// Number of threads (all available threads by default)
-    #[clap(short, long)]
+    /// Number of threads (defaults to all available threads)
+    #[arg(short, long)]
     threads: Option<usize>,
+    /// Memory (in MB) allocated to Bloom filters (defaults to input size)
+    #[arg(short, long)]
+    memory: Option<usize>,
     /// Abundance above which k-mers are solid
-    #[clap(short, long, default_value_t = 3)]
+    #[arg(short, long, default_value_t = 5)]
     abundance: u8,
-    /// Numbers of solid k-mers required to validate a correction
-    #[clap(short, long, default_value_t = 3)]
-    validation: usize,
+    /// Number of hashes used in Bloom filters
+    #[arg(short = 'H', long, default_value_t = 3)]
+    hashes: usize,
     /// Seed used for hash functions
-    #[clap(short, long, default_value_t = 101010)]
+    #[arg(short, long, default_value_t = 101010)]
     seed: u64,
 }
 
@@ -65,23 +68,29 @@ fn main() {
         std::thread::available_parallelism().map_or(1, |x| x.get())
     };
     let shard_amount = threads * 4;
-    let min_threshold = (args.abundance + 1) / 2;
-    let kmer_threshold = args.abundance + 1 - min_threshold;
-
-    let size = 100_000_000;
+    let size = if let Some(m) = args.memory {
+        m * 1_000_000 / 2
+    } else {
+        metadata(input_filename)
+            .expect("Failed to get input size")
+            .len() as usize
+            / 2
+    };
     let min_counts = CountingBloomFilter::new_with_seed_and_shard_amount(
         size,
-        3,
+        args.hashes,
         args.seed + M as u64,
         shard_amount,
     );
     let kmer_counts = CountingBloomFilter::new_with_seed_and_shard_amount(
         size,
-        3,
+        args.hashes,
         args.seed + K as u64,
         shard_amount,
     );
-    let solid_kmer = |kmer: RawKmer<K, KT>| kmer_counts.count(kmer.canonical()) >= kmer_threshold; // canonize ?
+    let min_threshold = (args.abundance + 1) / 2;
+    let kmer_threshold = args.abundance + 1 - min_threshold;
+    let solid_kmer = |kmer: RawKmer<K, KT>| kmer_counts.count(kmer.canonical()) >= kmer_threshold;
 
     let reads = Fasta::from_file(input_filename);
     reads.parallel_process(threads as u32, 32, |nucs| {
@@ -104,12 +113,12 @@ fn main() {
                 let min = queue.get_min();
                 if min == prev_min {
                     if min_is_solid {
-                        kmer_counts.add(kmer.canonical()); // canonize ?
+                        kmer_counts.add(kmer.canonical());
                     }
                 } else {
                     min_is_solid = min_counts.add_and_count(min) >= min_threshold;
                     if min_is_solid {
-                        kmer_counts.add(kmer.canonical()); // canonize ?
+                        kmer_counts.add(kmer.canonical());
                     }
                     prev_min = min;
                 }
@@ -124,9 +133,7 @@ fn main() {
     reads.parallel_process_result(
         threads as u32,
         32,
-        |nucs, (buffer, stats): &mut (Vec<u8>, Stats)| {
-            correct(nucs, solid_kmer, args.validation, buffer, stats)
-        },
+        |nucs, (buffer, stats): &mut (Vec<u8>, Stats)| correct(nucs, solid_kmer, buffer, stats),
         |(buffer, stats)| {
             writer.write(b">\n").expect("Failed to write newline");
             writer.write(buffer).expect("Failed to write buffer");
@@ -134,7 +141,5 @@ fn main() {
             global_stats += *stats;
         },
     );
-    println!("{} errors in total", global_stats.errors);
-    println!("{} long errors in total", global_stats.long_errors);
-    println!("{} corrections in total", global_stats.corrections);
+    println!("{:?}", global_stats);
 }
