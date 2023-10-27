@@ -21,6 +21,7 @@ fn main() {
         .parse()
         .expect("Failed to parse K");
     assert!(k >= 1, "K must be ≥ 1");
+    assert!(k < 64, "K must be < 64");
     assert!(k % 2 == 1, "K must be odd");
     code.push(format!("pub const K: usize = {k};"));
 
@@ -35,6 +36,7 @@ fn main() {
         .parse()
         .expect("Failed to parse M");
     assert!(m >= 1, "M must be ≥ 1");
+    assert!(m <= k, "M must be ≤ K (here M={m} > K={k})");
     assert!(m % 2 == 1, "M must be odd");
     code.push(format!("pub const M: usize = {m};"));
 
@@ -43,8 +45,6 @@ fn main() {
 
     let mt = select_type(mmer_bits);
     code.push(format!("pub type MT = {mt};"));
-
-    assert!(k >= m, "K must be ≥ M (here K={k} and M={m})");
 
     std::fs::write(out_dir.join("constants.rs"), code.join("\n"))
         .expect("Failed to write const file");
