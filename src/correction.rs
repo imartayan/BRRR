@@ -47,7 +47,7 @@ pub fn correct<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>
                     if K / 2 < error_size && error_size < 2 * K {
                         stats.errors += 1;
                         if let Some((middle, d0, d1)) =
-                            find_path(last_solid_kmer, kmer, error_size + 1, &solid)
+                            find_path(last_solid_kmer, kmer, 2, error_size + 1, &solid)
                         {
                             weak_bases = last_solid_kmer.to_bases()[1..d0].to_vec();
                             weak_bases.extend_from_slice(&middle.to_bases());
@@ -86,45 +86,49 @@ fn validate<
 fn find_path<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>(
     source: KmerT,
     target: KmerT,
+    min_dist: usize,
     max_dist: usize,
     solid: F,
 ) -> Option<(KmerT, usize, usize)> {
-    let half_max_dist = max_dist - max_dist / 2;
     let mut forward = VecDeque::new();
     forward.push_back(source);
     let mut backward = VecDeque::new();
     backward.push_back(target);
     let mut middle = Vec::new();
     let mut dist = (0, 0);
-    for i in 0..half_max_dist {
+    for i in 0..max_dist.div_ceil(2) {
         let n = forward.len();
         for _ in 0..n {
             let kmer = forward.pop_front().unwrap();
             forward.extend(kmer.successors().iter().filter(|&&succ| solid(succ)));
         }
-        middle = forward
-            .iter()
-            .filter_map(|kmer| backward.binary_search(kmer).map(|_| *kmer).ok())
-            .collect();
-        if !middle.is_empty() {
-            dist = (i + 1, i);
-            break;
+        if 2 * i + 1 >= min_dist {
+            middle = forward
+                .iter()
+                .filter_map(|kmer| backward.binary_search(kmer).map(|_| *kmer).ok())
+                .collect();
+            if !middle.is_empty() {
+                dist = (i + 1, i);
+                break;
+            }
         }
         let n: usize = backward.len();
         for _ in 0..n {
             let kmer = backward.pop_front().unwrap();
             backward.extend(kmer.predecessors().iter().filter(|&&pred| solid(pred)));
         }
-        middle = backward
-            .iter()
-            .filter_map(|kmer| forward.binary_search(kmer).map(|_| *kmer).ok())
-            .collect();
-        if !middle.is_empty() {
-            dist = (i + 1, i + 1);
-            break;
+        if 2 * i + 2 >= min_dist {
+            middle = backward
+                .iter()
+                .filter_map(|kmer| forward.binary_search(kmer).map(|_| *kmer).ok())
+                .collect();
+            if !middle.is_empty() {
+                dist = (i + 1, i + 1);
+                break;
+            }
         }
     }
-    if middle.len() == 1 && dist.1 > 0 {
+    if middle.len() == 1 {
         Some((middle[0], dist.0, dist.1))
     } else {
         None
