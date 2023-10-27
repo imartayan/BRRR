@@ -57,7 +57,7 @@ pub trait Kmer<const K: usize, T: Base>: Sized + Copy + RevComp + Ord + Hash {
     }
     #[inline]
     fn from_bases(bases: &[T]) -> Self {
-        Self::from_bases_iter(bases.iter().map(|&base| base))
+        Self::from_bases_iter(bases.iter().copied())
     }
     fn to_bases(self) -> [T; K] {
         let mut res = [T::zero(); K];
@@ -84,6 +84,7 @@ pub trait Kmer<const K: usize, T: Base>: Sized + Copy + RevComp + Ord + Hash {
         }
     }
     #[inline]
+    #[allow(clippy::type_complexity)]
     fn iter_from_nucs<'a, I: Iterator<Item = &'a u8>>(
         nucs: I,
     ) -> KmerIterator<K, T, Self, FilterMap<I, fn(&u8) -> Option<T>>> {

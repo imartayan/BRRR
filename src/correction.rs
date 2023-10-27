@@ -44,7 +44,7 @@ pub fn correct<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>
                     weak_bases.push(base);
                 }
                 (true, _) => {
-                    if error_size > K / 2 && error_size < 2 * K {
+                    if K / 2 < error_size && error_size < 2 * K {
                         stats.errors += 1;
                         if let Some((middle, d0, d1)) =
                             find_path(last_solid_kmer, kmer, error_size + 1, &solid)
@@ -106,7 +106,7 @@ fn find_path<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>(
             .iter()
             .filter_map(|kmer| backward.binary_search(kmer).map(|_| *kmer).ok())
             .collect();
-        if middle.len() > 0 {
+        if !middle.is_empty() {
             dist = (i + 1, i);
             break;
         }
@@ -119,12 +119,12 @@ fn find_path<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>(
             .iter()
             .filter_map(|kmer| forward.binary_search(kmer).map(|_| *kmer).ok())
             .collect();
-        if middle.len() > 0 {
+        if !middle.is_empty() {
             dist = (i + 1, i + 1);
             break;
         }
     }
-    if middle.len() == 1 {
+    if middle.len() == 1 && dist.1 > 0 {
         Some((middle[0], dist.0, dist.1))
     } else {
         None
@@ -138,14 +138,11 @@ fn try_deletion<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool
 ) -> bool {
     let stop = min(K - 1 + validation_threshold + 1, weak_bases.len());
     let weak_bases_slice = &weak_bases[..stop];
-    if validate(
-        weak_bases_slice.iter().map(|&base| base).deletion(K - 1),
-        &solid,
-    ) {
+    if validate(weak_bases_slice.iter().copied().deletion(K - 1), &solid) {
         weak_bases.remove(K - 1);
         return true;
     }
-    return false;
+    false
 }
 
 fn try_insertion<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>(
@@ -158,13 +155,10 @@ fn try_insertion<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> boo
     let weak_bases_slice = &weak_bases[..stop];
     for base in T::bases() {
         if validate(
-            weak_bases_slice
-                .iter()
-                .map(|&base| base)
-                .insertion(K - 1, base),
+            weak_bases_slice.iter().copied().insertion(K - 1, base),
             &solid,
         ) {
-            if good_insertion == None {
+            if good_insertion.is_none() {
                 good_insertion = Some(base);
             } else {
                 return false;
@@ -175,7 +169,7 @@ fn try_insertion<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> boo
         weak_bases.insert(K - 1, base);
         return true;
     }
-    return false;
+    false
 }
 
 fn try_substitution<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> bool>(
@@ -188,19 +182,16 @@ fn try_substitution<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> 
     let stop = min(K - 1 + validation_threshold, weak_bases.len());
     let weak_bases_slice = &weak_bases[..stop];
     for base in T::bases() {
-        if base != prev_base {
-            if validate(
-                weak_bases_slice
-                    .iter()
-                    .map(|&base| base)
-                    .substitution(K - 1, base),
+        if base != prev_base
+            && validate(
+                weak_bases_slice.iter().copied().substitution(K - 1, base),
                 &solid,
-            ) {
-                if good_substitution == None {
-                    good_substitution = Some(base);
-                } else {
-                    return false;
-                }
+            )
+        {
+            if good_substitution.is_none() {
+                good_substitution = Some(base);
+            } else {
+                return false;
             }
         }
     }
@@ -208,5 +199,5 @@ fn try_substitution<const K: usize, T: Base, KmerT: Kmer<K, T>, F: Fn(KmerT) -> 
         weak_bases[K - 1] = base;
         return true;
     }
-    return false;
+    false
 }

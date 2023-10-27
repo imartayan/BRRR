@@ -55,12 +55,10 @@ fn main() {
     let input_filename = args.input.as_str();
     let output_filename = if let Some(filename) = args.output {
         filename
+    } else if let Some((begin, end)) = input_filename.rsplit_once('.') {
+        begin.to_owned() + ".cor." + end
     } else {
-        if let Some((begin, end)) = input_filename.rsplit_once('.') {
-            begin.to_owned() + ".cor." + end
-        } else {
-            input_filename.to_owned() + ".cor"
-        }
+        input_filename.to_owned() + ".cor"
     };
     let threads = if let Some(num) = args.threads {
         num
@@ -135,9 +133,9 @@ fn main() {
         32,
         |nucs, (buffer, stats): &mut (Vec<u8>, Stats)| correct(nucs, solid_kmer, buffer, stats),
         |(buffer, stats)| {
-            writer.write(b">\n").expect("Failed to write newline");
-            writer.write(buffer).expect("Failed to write buffer");
-            writer.write(b"\n").expect("Failed to write newline");
+            writer.write_all(b">\n").expect("Failed to write newline");
+            writer.write_all(buffer).expect("Failed to write buffer");
+            writer.write_all(b"\n").expect("Failed to write newline");
             global_stats += *stats;
         },
     );

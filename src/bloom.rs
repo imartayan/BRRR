@@ -1,6 +1,6 @@
 use ahash::RandomState;
 use bit_vec::BitVec;
-use core::hash::{BuildHasher, Hash, Hasher};
+use core::hash::Hash;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
@@ -35,25 +35,24 @@ impl BloomFilter {
     }
 
     fn hashes<T: Hash>(&self, x: T) -> (u64, u64) {
-        let mut state_0 = self.hash_builders.0.build_hasher();
-        let mut state_1 = self.hash_builders.1.build_hasher();
-        x.hash(&mut state_0);
-        x.hash(&mut state_1);
-        (state_0.finish(), state_1.finish())
+        (
+            self.hash_builders.0.hash_one(&x),
+            self.hash_builders.1.hash_one(&x),
+        )
     }
 
     fn indices<T: Hash>(&self, x: T) -> Vec<usize> {
-        let mut res = vec![0; self.n_hashes];
+        let mut res = Vec::with_capacity(self.n_hashes);
         let (h0, h1) = self.hashes(x);
         let u = h0 as usize % self.size;
         let v = h1 as usize;
         let block_addr = u & Self::BLOCK_PREFIX;
         let mut local_addr = u;
-        res[0] = u;
-        for i in 1..self.n_hashes {
+        res.push(u);
+        (1..self.n_hashes).for_each(|_| {
             local_addr = (local_addr + v) & Self::BLOCK_MASK;
-            res[i] = block_addr | local_addr;
-        }
+            res.push(block_addr | local_addr);
+        });
         res
     }
 
@@ -142,25 +141,24 @@ impl CountingBloomFilter {
     }
 
     fn hashes<T: Hash>(&self, x: T) -> (u64, u64) {
-        let mut state_0 = self.hash_builders.0.build_hasher();
-        let mut state_1 = self.hash_builders.1.build_hasher();
-        x.hash(&mut state_0);
-        x.hash(&mut state_1);
-        (state_0.finish(), state_1.finish())
+        (
+            self.hash_builders.0.hash_one(&x),
+            self.hash_builders.1.hash_one(&x),
+        )
     }
 
     fn indices<T: Hash>(&self, x: T) -> Vec<usize> {
-        let mut res = vec![0; self.n_hashes];
+        let mut res = Vec::with_capacity(self.n_hashes);
         let (h0, h1) = self.hashes(x);
         let u = h0 as usize % self.size;
         let v = h1 as usize;
         let block_addr = u & Self::BLOCK_PREFIX;
         let mut local_addr = u;
-        res[0] = u;
-        for i in 1..self.n_hashes {
+        res.push(u);
+        (1..self.n_hashes).for_each(|_| {
             local_addr = (local_addr + v) & Self::BLOCK_MASK;
-            res[i] = block_addr | local_addr;
-        }
+            res.push(block_addr | local_addr);
+        });
         res
     }
 

@@ -1,5 +1,5 @@
 use ahash::RandomState;
-use core::hash::{BuildHasher, Hash, Hasher};
+use core::hash::Hash;
 use std::collections::VecDeque;
 
 pub struct MinimizerQueue<const W: usize, T: Hash + Copy> {
@@ -27,9 +27,7 @@ impl<const W: usize, T: Hash + Copy> MinimizerQueue<W, T> {
     }
 
     fn hash(&self, u: T) -> u64 {
-        let mut state = self.hash_builder.build_hasher();
-        u.hash(&mut state);
-        state.finish()
+        self.hash_builder.hash_one(u)
     }
 
     pub fn insert(&mut self, u: T) {
