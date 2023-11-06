@@ -1,26 +1,66 @@
-use seq_io::fasta::{Reader, RefRecord};
+use seq_io::fasta;
 use seq_io::parallel::read_process_fasta_records;
-use seq_io::BaseRecord;
+pub use seq_io::BaseRecord;
 use std::fs::File;
 use std::path::Path;
 use std::slice::Iter;
 
 pub struct Fasta {
-    reader: Reader<File>,
+    reader: fasta::Reader<File>,
 }
 
 impl Fasta {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            reader: Reader::from_path(path).expect("Failed to open file"),
+            reader: fasta::Reader::from_path(path).expect("Failed to open file"),
         }
     }
 }
 
-pub trait ReadProcess {
-    fn process<F: FnMut(Iter<u8>)>(self, f: F);
-    fn parallel_process<F: Send + Sync + Fn(Iter<u8>)>(self, threads: u32, queue_len: usize, f: F);
-    fn parallel_process_result<
+pub trait ReadProcess: Sized {
+    type Rec<'a>: BaseRecord;
+
+    fn process_rec<F: FnMut(Self::Rec<'_>)>(self, f: F);
+
+    fn process_rec_par_result<
+        R: Default + Send,
+        F: Send + Sync + Fn(Self::Rec<'_>, &mut R),
+        G: FnMut(Self::Rec<'_>, &mut R),
+    >(
+        self,
+        threads: u32,
+        queue_len: usize,
+        f: F,
+        handle_result: G,
+    );
+
+    #[inline]
+    fn process<F: FnMut(Iter<u8>)>(self, mut f: F) {
+        self.process_rec(|record| f(record.seq().iter()));
+    }
+
+    #[inline]
+    fn process_rec_par<F: Send + Sync + Fn(Self::Rec<'_>)>(
+        self,
+        threads: u32,
+        queue_len: usize,
+        f: F,
+    ) {
+        self.process_rec_par_result(
+            threads,
+            queue_len,
+            |record, _: &mut Option<()>| f(record),
+            |_, _| (),
+        )
+    }
+
+    #[inline]
+    fn process_par<F: Send + Sync + Fn(Iter<u8>)>(self, threads: u32, queue_len: usize, f: F) {
+        self.process_rec_par(threads, queue_len, |record| f(record.seq().iter()));
+    }
+
+    #[inline]
+    fn process_par_result<
         R: Default + Send,
         F: Send + Sync + Fn(Iter<u8>, &mut R),
         G: FnMut(&mut R),
@@ -29,35 +69,31 @@ pub trait ReadProcess {
         threads: u32,
         queue_len: usize,
         f: F,
-        handle_result: G,
-    );
+        mut handle_result: G,
+    ) {
+        self.process_rec_par_result(
+            threads,
+            queue_len,
+            |record, result| f(record.seq().iter(), result),
+            |_, result| handle_result(result),
+        );
+    }
 }
 
 impl ReadProcess for Fasta {
-    fn process<F: FnMut(Iter<u8>)>(mut self, mut f: F) {
+    type Rec<'a> = fasta::RefRecord<'a>;
+
+    fn process_rec<F: FnMut(Self::Rec<'_>)>(mut self, mut f: F) {
         while let Some(result) = self.reader.next() {
             let record = result.expect("Error reading record");
-            f(record.seq().iter());
+            f(record);
         }
     }
 
-    fn parallel_process<F: Send + Sync + Fn(Iter<u8>)>(self, threads: u32, queue_len: usize, f: F) {
-        read_process_fasta_records(
-            self.reader,
-            threads,
-            queue_len,
-            |record: RefRecord, _: &mut Option<()>| {
-                f(record.seq().iter());
-            },
-            |_, _| None::<()>,
-        )
-        .unwrap();
-    }
-
-    fn parallel_process_result<
+    fn process_rec_par_result<
         R: Default + Send,
-        F: Send + Sync + Fn(Iter<u8>, &mut R),
-        G: FnMut(&mut R),
+        F: Send + Sync + Fn(Self::Rec<'_>, &mut R),
+        G: FnMut(Self::Rec<'_>, &mut R),
     >(
         self,
         threads: u32,
@@ -69,11 +105,11 @@ impl ReadProcess for Fasta {
             self.reader,
             threads,
             queue_len,
-            |record: RefRecord, result: &mut R| {
-                f(record.seq().iter(), result);
+            |record: Self::Rec<'_>, result: &mut R| {
+                f(record, result);
             },
-            |_, result| {
-                handle_result(result);
+            |record, result| {
+                handle_result(record, result);
                 None::<()>
             },
         )

@@ -12,7 +12,7 @@ use correction::{correct, Stats};
 use dashbloom::CountingBloomFilter;
 use kmer::{Base, Kmer, RawKmer};
 use minimizer::MinimizerQueue;
-use reads::{Fasta, ReadProcess};
+use reads::{BaseRecord, Fasta, ReadProcess};
 use std::fs::{metadata, File};
 use std::io::{BufWriter, Write};
 
@@ -91,7 +91,7 @@ fn main() {
     let solid_kmer = |kmer: RawKmer<K, KT>| kmer_counts.count(kmer.canonical()) >= kmer_threshold;
 
     let reads = Fasta::from_file(input_filename);
-    reads.parallel_process(threads as u32, 32, |nucs| {
+    reads.process_par(threads as u32, 32, |nucs| {
         let mut kmer = RawKmer::<K, KT>::new();
         let mut mmer = RawKmer::<M, MT>::new();
         let mut queue = MinimizerQueue::<W, _>::new_with_seed(args.seed + W as u64);
@@ -128,14 +128,20 @@ fn main() {
     let output = File::create(output_filename).expect("Failed to open output file");
     let mut writer = BufWriter::new(output);
     let mut global_stats = Stats::default();
-    reads.parallel_process_result(
+    reads.process_rec_par_result(
         threads as u32,
         32,
-        |nucs, (buffer, stats): &mut (Vec<u8>, Stats)| correct(nucs, solid_kmer, buffer, stats),
-        |(buffer, stats)| {
-            writer.write_all(b">\n").expect("Failed to write newline");
+        |record, (buffer, stats): &mut (Vec<u8>, Stats)| {
+            correct(record.seq().iter(), solid_kmer, buffer, stats)
+        },
+        |record, (buffer, stats)| {
+            writer.write_all(b">").unwrap();
+            writer
+                .write_all(record.head())
+                .expect("Failed to write record header");
+            writer.write_all(b"\n").unwrap();
             writer.write_all(buffer).expect("Failed to write buffer");
-            writer.write_all(b"\n").expect("Failed to write newline");
+            writer.write_all(b"\n").unwrap();
             global_stats += *stats;
         },
     );
