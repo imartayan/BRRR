@@ -102,7 +102,7 @@ fn main() {
                 mmer = mmer.extend(base);
             } else {
                 mmer = mmer.append(base);
-                queue.insert(mmer);
+                queue.insert(mmer.canonical());
             }
             if i < K - 1 {
                 kmer = kmer.extend(base as KT);
