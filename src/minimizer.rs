@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 pub struct MinimizerQueue<const W: usize, T: Hash + Copy> {
     deq: VecDeque<(T, u8)>,
     hash_builder: RandomState,
-    time: u8,
+    pos: u8,
 }
 
 impl<const W: usize, T: Hash + Copy> MinimizerQueue<W, T> {
@@ -13,7 +13,7 @@ impl<const W: usize, T: Hash + Copy> MinimizerQueue<W, T> {
         Self {
             deq: VecDeque::with_capacity(W),
             hash_builder: RandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3),
-            time: 0,
+            pos: 0,
         }
     }
 
@@ -31,23 +31,22 @@ impl<const W: usize, T: Hash + Copy> MinimizerQueue<W, T> {
     }
 
     pub fn insert(&mut self, u: T) {
+        if !self.deq.is_empty() && self.deq[0].1 == self.pos {
+            self.deq.pop_front();
+        }
         let mut i = self.deq.len();
-        while i > 0 {
-            let (v, _) = self.deq[i - 1];
-            if self.hash(v) <= self.hash(u) {
-                break;
-            }
+        while i > 0 && self.hash(self.deq[i - 1].0) <= self.hash(u) {
             i -= 1;
         }
         self.deq.truncate(i);
-        if i > 0 {
-            let (_, t) = self.deq[0];
-            if t == self.time {
-                self.deq.pop_front();
-            }
-        }
-        self.deq.push_back((u, self.time));
-        self.time = (self.time + 1) % W as u8;
+        self.deq.push_back((u, self.pos));
+        self.pos = (self.pos + 1) % W as u8;
+    }
+}
+
+impl<const W: usize, T: Hash + Copy> Default for MinimizerQueue<W, T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
